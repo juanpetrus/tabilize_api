@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { TasksService } from './tasks.service.js';
 import { CreateTaskDto } from './dto/create-task.dto.js';
 import { UpdateTaskDto } from './dto/update-task.dto.js';
@@ -9,69 +9,54 @@ interface AuthRequest {
 }
 
 @UseGuards(JwtAuthGuard)
-@Controller('teams/:teamId/companies/:companyId/tasks')
+@Controller('teams/:teamId/tasks')
 export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
   @Post()
   create(
     @Param('teamId') teamId: string,
-    @Param('companyId') companyId: string,
     @Req() req: AuthRequest,
     @Body() dto: CreateTaskDto,
   ) {
-    return this.tasksService.create(teamId, companyId, req.user.id, dto);
+    return this.tasksService.create(teamId, req.user.id, dto);
   }
 
   @Get()
   findAll(
     @Param('teamId') teamId: string,
-    @Param('companyId') companyId: string,
     @Req() req: AuthRequest,
+    @Query('companyId') companyId?: string,
+    @Query('assigneeId') assigneeId?: string,
   ) {
-    return this.tasksService.findAll(teamId, companyId, req.user.id);
+    return this.tasksService.findAllByTeam(teamId, req.user.id, companyId, assigneeId);
   }
 
   @Get(':taskId')
   findOne(
     @Param('teamId') teamId: string,
-    @Param('companyId') companyId: string,
     @Param('taskId') taskId: string,
     @Req() req: AuthRequest,
   ) {
-    return this.tasksService.findOne(teamId, companyId, taskId, req.user.id);
+    return this.tasksService.findOne(teamId, taskId, req.user.id);
   }
 
   @Patch(':taskId')
   update(
     @Param('teamId') teamId: string,
-    @Param('companyId') companyId: string,
     @Param('taskId') taskId: string,
     @Req() req: AuthRequest,
     @Body() dto: UpdateTaskDto,
   ) {
-    return this.tasksService.update(teamId, companyId, taskId, req.user.id, dto);
+    return this.tasksService.update(teamId, taskId, req.user.id, dto);
   }
 
   @Delete(':taskId')
   remove(
     @Param('teamId') teamId: string,
-    @Param('companyId') companyId: string,
     @Param('taskId') taskId: string,
     @Req() req: AuthRequest,
   ) {
-    return this.tasksService.remove(teamId, companyId, taskId, req.user.id);
-  }
-}
-
-// Listar todas as tarefas do escritório (visão geral)
-@UseGuards(JwtAuthGuard)
-@Controller('teams/:teamId/tasks')
-export class TeamTasksController {
-  constructor(private readonly tasksService: TasksService) {}
-
-  @Get()
-  findAll(@Param('teamId') teamId: string, @Req() req: AuthRequest) {
-    return this.tasksService.findAllByTeam(teamId, req.user.id);
+    return this.tasksService.remove(teamId, taskId, req.user.id);
   }
 }

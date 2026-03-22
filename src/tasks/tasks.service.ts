@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../database/index.js';
 import { CreateTaskDto } from './dto/create-task.dto.js';
 import { UpdateTaskDto } from './dto/update-task.dto.js';
@@ -13,13 +13,17 @@ const taskInclude = {
 export class TasksService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(teamId: string, companyId: string, userId: string, dto: CreateTaskDto) {
-    await this.ensureAccess(teamId, companyId, userId);
+  async create(teamId: string, userId: string, dto: CreateTaskDto) {
+    await this.ensureTeamMember(teamId, userId);
+
+    if (dto.companyId) {
+      await this.ensureCompanyBelongsToTeam(teamId, dto.companyId);
+    }
 
     return this.prisma.task.create({
       data: {
         teamId,
-        companyId,
+        companyId: dto.companyId,
         creatorId: userId,
         title: dto.title,
         description: dto.description,
@@ -31,31 +35,26 @@ export class TasksService {
     });
   }
 
-  async findAll(teamId: string, companyId: string, userId: string) {
-    await this.ensureAccess(teamId, companyId, userId);
-
-    return this.prisma.task.findMany({
-      where: { companyId, teamId, isActive: true },
-      include: taskInclude,
-      orderBy: { createdAt: 'desc' },
-    });
-  }
-
-  async findAllByTeam(teamId: string, userId: string) {
+  async findAllByTeam(teamId: string, userId: string, companyId?: string, assigneeId?: string) {
     await this.ensureTeamMember(teamId, userId);
 
     return this.prisma.task.findMany({
-      where: { teamId, isActive: true },
+      where: {
+        teamId,
+        isActive: true,
+        ...(companyId ? { companyId } : {}),
+        ...(assigneeId ? { assigneeId } : {}),
+      },
       include: taskInclude,
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  async findOne(teamId: string, companyId: string, taskId: string, userId: string) {
-    await this.ensureAccess(teamId, companyId, userId);
+  async findOne(teamId: string, taskId: string, userId: string) {
+    await this.ensureTeamMember(teamId, userId);
 
     const task = await this.prisma.task.findFirst({
-      where: { id: taskId, companyId, teamId, isActive: true },
+      where: { id: taskId, teamId, isActive: true },
       include: taskInclude,
     });
 
@@ -64,17 +63,11 @@ export class TasksService {
     return task;
   }
 
-  async update(
-    teamId: string,
-    companyId: string,
-    taskId: string,
-    userId: string,
-    dto: UpdateTaskDto,
-  ) {
-    await this.ensureAccess(teamId, companyId, userId);
+  async update(teamId: string, taskId: string, userId: string, dto: UpdateTaskDto) {
+    await this.ensureTeamMember(teamId, userId);
 
     const task = await this.prisma.task.findFirst({
-      where: { id: taskId, companyId, teamId, isActive: true },
+      where: { id: taskId, teamId, isActive: true },
     });
 
     if (!task) throw new NotFoundException('Tarefa não encontrada');
@@ -89,11 +82,11 @@ export class TasksService {
     });
   }
 
-  async remove(teamId: string, companyId: string, taskId: string, userId: string) {
-    await this.ensureAccess(teamId, companyId, userId);
+  async remove(teamId: string, taskId: string, userId: string) {
+    await this.ensureTeamMember(teamId, userId);
 
     const task = await this.prisma.task.findFirst({
-      where: { id: taskId, companyId, teamId, isActive: true },
+      where: { id: taskId, teamId, isActive: true },
     });
 
     if (!task) throw new NotFoundException('Tarefa não encontrada');
@@ -104,14 +97,12 @@ export class TasksService {
     });
   }
 
-  private async ensureAccess(teamId: string, companyId: string, userId: string) {
-    await this.ensureTeamMember(teamId, userId);
-
+  private async ensureCompanyBelongsToTeam(teamId: string, companyId: string) {
     const company = await this.prisma.company.findFirst({
       where: { id: companyId, teamId, isActive: true },
     });
 
-    if (!company) throw new NotFoundException('Empresa não encontrada');
+    if (!company) throw new BadRequestException('Empresa não encontrada neste escritório');
   }
 
   private async ensureTeamMember(teamId: string, userId: string) {

@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { CompaniesService } from './companies.service.js';
 import { CreateCompanyDto } from './dto/create-company.dto.js';
 import { UpdateCompanyDto } from './dto/update-company.dto.js';
@@ -53,5 +54,15 @@ export class CompaniesController {
     @Req() req: AuthRequest,
   ) {
     return this.companiesService.remove(teamId, companyId, req.user.id);
+  }
+
+  @Post('import')
+  @UseInterceptors(FileInterceptor('file'))
+  importCsv(
+    @Param('teamId') teamId: string,
+    @Req() req: AuthRequest,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.companiesService.importCsv(teamId, req.user.id, file.buffer);
   }
 }

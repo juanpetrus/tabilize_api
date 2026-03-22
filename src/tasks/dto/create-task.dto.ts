@@ -11,6 +11,10 @@ export class CreateTaskDto {
   description?: string;
 
   @IsOptional()
+  @IsUUID()
+  companyId?: string;
+
+  @IsOptional()
   @IsEnum(TaskPriority)
   priority?: TaskPriority;
 

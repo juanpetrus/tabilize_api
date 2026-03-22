@@ -3,7 +3,9 @@ import {
   ConflictException,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
+import { parse } from 'csv-parse/sync';
 import { PrismaService } from '../database/index.js';
 import { CreateCompanyDto } from './dto/create-company.dto.js';
 import { UpdateCompanyDto } from './dto/update-company.dto.js';
@@ -89,6 +91,62 @@ export class CompaniesService {
       where: { id: companyId },
       data: { isActive: false },
     });
+  }
+
+  async importCsv(teamId: string, userId: string, fileBuffer: Buffer) {
+    await this.ensureTeamMember(teamId, userId);
+
+    let rows: Record<string, string>[];
+
+    try {
+      rows = parse(fileBuffer, {
+        columns: true,
+        skip_empty_lines: true,
+        trim: true,
+      });
+    } catch {
+      throw new BadRequestException('Arquivo CSV inválido');
+    }
+
+    if (rows.length === 0) throw new BadRequestException('Planilha vazia');
+
+    const imported: string[] = [];
+    const skipped: { row: number; name: string; reason: string }[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const name = row['nome'] || row['name'];
+      const cnpj = row['cnpj']?.replace(/\D/g, '') || undefined;
+      const email = row['email'] || undefined;
+      const phone = row['telefone'] || row['phone'] || undefined;
+      const address = row['endereco'] || row['address'] || undefined;
+
+      if (!name) {
+        skipped.push({ row: i + 2, name: '-', reason: 'Nome obrigatório' });
+        continue;
+      }
+
+      if (cnpj && !/^\d{14}$/.test(cnpj)) {
+        skipped.push({ row: i + 2, name, reason: 'CNPJ inválido' });
+        continue;
+      }
+
+      if (cnpj) {
+        const existing = await this.prisma.company.findUnique({ where: { cnpj } });
+        if (existing) {
+          skipped.push({ row: i + 2, name, reason: 'CNPJ já cadastrado' });
+          continue;
+        }
+      }
+
+      await this.prisma.company.create({
+        data: { teamId, name, cnpj, email, phone, address },
+      });
+
+      imported.push(name);
+    }
+
+    return { imported: imported.length, skipped };
   }
 
   private async ensureTeamMember(teamId: string, userId: string) {
