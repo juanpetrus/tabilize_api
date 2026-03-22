@@ -76,17 +76,17 @@ model User {
 // ─── Planos ───────────────────────────────────────────────────────────────────
 
 model Plan {
-  id                    String   @id
-  name                  String
-  description           String
-  priceMonthly          Int
-  priceYearly           Int
-  features              String[]
-  stripePriceMonthly    String?
-  stripePriceYearly     String?
-  isActive              Boolean  @default(true)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  id                 String   @id
+  name               String
+  description        String
+  priceMonthly       Int
+  priceYearly        Int
+  features           String[]
+  idProductMonthly   String?
+  idProductYearly    String?
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   teams Team[]
 }

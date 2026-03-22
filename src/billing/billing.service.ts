@@ -53,7 +53,7 @@ export class BillingService {
     const plan = await this.prisma.plan.findUnique({ where: { id: planId } });
     if (!plan) throw new NotFoundException('Plano não encontrado');
 
-    const priceId = period === 'yearly' ? plan.stripePriceYearly : plan.stripePriceMonthly;
+    const priceId = period === 'yearly' ? plan.idProductYearly : plan.idProductMonthly;
     if (!priceId) throw new BadRequestException('Preço não configurado para este plano');
 
     const team = await this.prisma.team.findUnique({ where: { id: teamId } });

@@ -7,32 +7,32 @@ const prisma = new PrismaClient({ adapter });
 
 async function main() {
   await prisma.plan.upsert({
-    where: { id: 'starter' },
+    where: { id: 'plan_starter' },
     update: {},
     create: {
-      id: 'starter',
+      id: 'plan_starter',
       name: 'Starter',
       description: 'Para escritórios em início de operação',
       priceMonthly: 9700,
       priceYearly: 97000,
       features: ['Até 20 empresas', 'Tarefas ilimitadas', 'Documentos ilimitados', 'Suporte por e-mail'],
-      stripePriceMonthly: process.env['STRIPE_PRICE_STARTER_MONTHLY'],
-      stripePriceYearly: process.env['STRIPE_PRICE_STARTER_YEARLY'],
+      idProductMonthly: process.env['STRIPE_PRICE_STARTER_MONTHLY'],
+      idProductYearly: process.env['STRIPE_PRICE_STARTER_YEARLY'],
     },
   });
 
   await prisma.plan.upsert({
-    where: { id: 'pro' },
+    where: { id: 'plan_pro' },
     update: {},
     create: {
-      id: 'pro',
+      id: 'plan_pro',
       name: 'Pro',
       description: 'Para escritórios em crescimento',
       priceMonthly: 19700,
       priceYearly: 197000,
       features: ['Empresas ilimitadas', 'Tarefas ilimitadas', 'Documentos ilimitados', 'Importação de planilha CSV', 'Suporte prioritário'],
-      stripePriceMonthly: process.env['STRIPE_PRICE_PRO_MONTHLY'],
-      stripePriceYearly: process.env['STRIPE_PRICE_PRO_YEARLY'],
+      idProductMonthly: process.env['STRIPE_PRICE_PRO_MONTHLY'],
+      idProductYearly: process.env['STRIPE_PRICE_PRO_YEARLY'],
     },
   });
 
