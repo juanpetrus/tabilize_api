@@ -39,10 +39,16 @@ export class AuthService {
         },
       });
 
+      const trialExpiry = new Date();
+      trialExpiry.setDate(trialExpiry.getDate() + 7);
+
       await tx.team.create({
         data: {
           name: dto.teamName,
           ownerId: newUser.id,
+          planId: dto.planId,
+          subscriptionStatus: 'TRIAL',
+          subscriptionExpiry: trialExpiry,
           members: {
             create: { userId: newUser.id, role: 'OWNER' },
           },
@@ -99,6 +105,45 @@ export class AuthService {
   async deleteUser(userId: string) {
     await this.prisma.user.update({ where: { id: userId }, data: { isActive: false } });
     return { message: 'Conta desativada com sucesso' };
+  }
+
+  async me(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        createdAt: true,
+        teamMembers: {
+          where: { isActive: true },
+          select: {
+            role: true,
+            team: {
+              select: {
+                id: true,
+                name: true,
+                planId: true,
+                subscriptionStatus: true,
+                subscriptionExpiry: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const teams = user?.teamMembers.map(({ role, team }) => {
+      const expiry = team.subscriptionExpiry;
+      const trialDaysLeft =
+        team.subscriptionStatus === 'TRIAL' && expiry
+          ? Math.max(0, Math.ceil((expiry.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+          : null;
+
+      return { role, ...team, trialDaysLeft };
+    });
+
+    return { user: { ...user, teamMembers: teams } };
   }
 
   async validateUser(userId: string) {

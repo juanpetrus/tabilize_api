@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsIn, IsNotEmpty, IsString, MinLength } from 'class-validator';
 
 export class RegisterDto {
   @IsString()
@@ -16,4 +16,8 @@ export class RegisterDto {
   @IsString()
   @IsNotEmpty({ message: 'Nome do escritório não pode ser vazio' })
   teamName: string;
+
+  @IsString()
+  @IsIn(['starter', 'pro'], { message: 'Plano inválido' })
+  planId: string;
 }

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseModule } from './database';
@@ -10,6 +11,8 @@ import { DocumentsModule } from './documents/documents.module.js';
 import { TasksModule } from './tasks/tasks.module.js';
 import { ServiceRequestsModule } from './service-requests/service-requests.module.js';
 import { PaymentsModule } from './payments/payments.module.js';
+import { BillingModule } from './billing/billing.module.js';
+import { SubscriptionGuard } from './billing/subscription.guard.js';
 
 @Module({
   imports: [
@@ -22,8 +25,12 @@ import { PaymentsModule } from './payments/payments.module.js';
     TasksModule,
     ServiceRequestsModule,
     PaymentsModule,
+    BillingModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    { provide: APP_GUARD, useClass: SubscriptionGuard },
+  ],
 })
 export class AppModule {}

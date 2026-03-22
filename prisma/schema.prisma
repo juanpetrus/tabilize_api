@@ -73,17 +73,40 @@ model User {
   assignedTasks Task[]       @relation("TaskAssignee")
 }
 
+// ─── Planos ───────────────────────────────────────────────────────────────────
+
+model Plan {
+  id                    String   @id
+  name                  String
+  description           String
+  priceMonthly          Int
+  priceYearly           Int
+  features              String[]
+  stripePriceMonthly    String?
+  stripePriceYearly     String?
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  teams Team[]
+}
+
 // ─── Escritório / Workspace ───────────────────────────────────────────────────
 
 model Team {
-  id        String   @id @default(uuid())
-  name      String
-  ownerId   String
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                 String    @id @default(uuid())
+  name               String
+  ownerId            String
+  isActive           Boolean   @default(true)
+  planId             String?
+  subscriptionStatus String    @default("INACTIVE")
+  subscriptionId     String?
+  subscriptionExpiry DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   owner     User         @relation("TeamOwner", fields: [ownerId], references: [id])
+  plan      Plan?        @relation(fields: [planId], references: [id])
   members   TeamMember[]
   companies Company[]
   tasks     Task[]
