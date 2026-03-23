@@ -18,6 +18,6 @@ export class RegisterDto {
   teamName: string;
 
   @IsString()
-  @IsIn(['plan_starter', 'pla_pro'], { message: 'Plano inválido' })
+  @IsIn(['plan_starter', 'plan_pro'], { message: 'Plano inválido' })
   planId: string;
 }
