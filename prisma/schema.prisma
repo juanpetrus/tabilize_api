@@ -101,6 +101,7 @@ model Team {
   planId             String?
   subscriptionStatus String    @default("INACTIVE")
   subscriptionId     String?
+  customerId         String?
   subscriptionExpiry DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt

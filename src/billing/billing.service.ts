@@ -77,18 +77,13 @@ export class BillingService {
     const priceId = period === 'yearly' ? plan.idProductYearly : plan.idProductMonthly;
     if (!priceId) throw new BadRequestException('Preço não configurado para este plano');
 
-    const team = await this.prisma.team.findUnique({ where: { id: teamId } });
-    const isOnTrial = team?.subscriptionStatus === 'TRIAL' &&
-      team?.subscriptionExpiry != null &&
-      team.subscriptionExpiry.getTime() > Date.now();
-
     const customer = await stripe.customers.create({
       name,
       email,
       metadata: { teamId },
     });
 
-    const subscriptionParams: Stripe.SubscriptionCreateParams = {
+    const subscription = await stripe.subscriptions.create({
       customer: customer.id,
       items: [{ price: priceId }],
       payment_behavior: 'default_incomplete',
@@ -98,33 +93,13 @@ export class BillingService {
       },
       expand: ['latest_invoice.payment_intent'],
       metadata: { teamId, planId, period },
-    };
+    });
 
-    if (isOnTrial && team?.subscriptionExpiry) {
-      const daysLeft = Math.ceil((team.subscriptionExpiry.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-      if (daysLeft > 0) subscriptionParams.trial_period_days = daysLeft;
-    }
+    await this.prisma.team.update({
+      where: { id: teamId },
+      data: { customerId: customer.id },
+    });
 
-    const subscription = await stripe.subscriptions.create(subscriptionParams);
-
-    // Trial ativo → SetupIntent para salvar cartão sem cobrar agora
-    if (isOnTrial) {
-      const setupIntent = await stripe.setupIntents.create({
-        customer: customer.id,
-        payment_method_types: ['card'],
-        usage: 'off_session',
-        metadata: { subscriptionId: subscription.id, planId },
-      });
-
-      return {
-        clientSecret: setupIntent.client_secret,
-        customerId: customer.id,
-        subscriptionId: subscription.id,
-        mode: 'setup',
-      };
-    }
-
-    // Sem trial → PaymentIntent para cobrar imediatamente
     const invoice = subscription.latest_invoice as Stripe.Invoice;
     const paymentIntent = (invoice as unknown as { payment_intent: Stripe.PaymentIntent }).payment_intent;
 
@@ -132,7 +107,6 @@ export class BillingService {
       clientSecret: paymentIntent.client_secret,
       customerId: customer.id,
       subscriptionId: subscription.id,
-      mode: 'payment',
     };
   }
 
@@ -147,10 +121,14 @@ export class BillingService {
       throw new BadRequestException('Webhook inválido');
     }
 
-    if (event.type === 'checkout.session.completed') {
-      const session = event.data.object as Stripe.Checkout.Session;
-      const { teamId, planId } = session.metadata ?? {};
-      if (!teamId) return { received: true };
+    if (event.type === 'invoice.paid') {
+      const invoice = event.data.object as Stripe.Invoice;
+      const parent = invoice.parent as { subscription_details?: { subscription?: string; metadata?: Record<string, string> } } | null;
+      const subscriptionId = parent?.subscription_details?.subscription ?? null;
+      const teamId = parent?.subscription_details?.metadata?.['teamId'];
+      const planId = parent?.subscription_details?.metadata?.['planId'];
+
+      if (!teamId || !subscriptionId) return { received: true };
 
       const expiry = new Date();
       expiry.setMonth(expiry.getMonth() + 1);
@@ -159,26 +137,10 @@ export class BillingService {
         where: { id: teamId },
         data: {
           subscriptionStatus: 'ACTIVE',
-          subscriptionId: session.subscription as string,
+          subscriptionId,
           subscriptionExpiry: expiry,
           ...(planId ? { planId } : {}),
         },
-      });
-    }
-
-    if (event.type === 'invoice.paid') {
-      const invoice = event.data.object as Stripe.Invoice;
-      const subscriptionId = (invoice as unknown as { subscription?: string }).subscription;
-
-      const team = await this.prisma.team.findFirst({ where: { subscriptionId } });
-      if (!team) return { received: true };
-
-      const expiry = new Date();
-      expiry.setMonth(expiry.getMonth() + 1);
-
-      await this.prisma.team.update({
-        where: { id: team.id },
-        data: { subscriptionStatus: 'ACTIVE', subscriptionExpiry: expiry },
       });
     }
 
