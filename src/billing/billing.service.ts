@@ -125,7 +125,7 @@ export class BillingService {
         clientSecret: setupIntent.client_secret,
         customerId: customer.id,
         subscriptionId: subscription.id,
-        mode: 'setup',
+        mode: 'payment',
       };
     }
 
