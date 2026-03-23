@@ -32,11 +32,32 @@ export class BillingService {
       },
     });
 
+    let stripeSubscription: {
+      stripeStatus: string;
+      currentPeriodStart: Date | null;
+      currentPeriodEnd: Date | null;
+      cancelAtPeriodEnd: boolean;
+      cancelAt: Date | null;
+    } | null = null;
+
+    if (team?.subscriptionId) {
+      const sub = await stripe.subscriptions.retrieve(team.subscriptionId);
+      const item = sub.items.data[0];
+      stripeSubscription = {
+        stripeStatus: sub.status,
+        currentPeriodStart: item ? new Date(item.current_period_start * 1000) : null,
+        currentPeriodEnd: item ? new Date(item.current_period_end * 1000) : null,
+        cancelAtPeriodEnd: sub.cancel_at_period_end,
+        cancelAt: sub.cancel_at ? new Date(sub.cancel_at * 1000) : null,
+      };
+    }
+
     return {
       subscriptionStatus: team?.subscriptionStatus ?? 'INACTIVE',
       subscriptionExpiry: team?.subscriptionExpiry ?? null,
       subscriptionId: team?.subscriptionId ?? null,
-      plan: team?.plan ?? null,
+      current_plan: team?.plan ?? null,
+      stripe: stripeSubscription,
     };
   }
 
