@@ -77,14 +77,16 @@ export class BillingService {
     const priceId = period === 'yearly' ? plan.idProductYearly : plan.idProductMonthly;
     if (!priceId) throw new BadRequestException('Preço não configurado para este plano');
 
-    const customer = await stripe.customers.create({
+    const team = await this.prisma.team.findUnique({ where: { id: teamId } });
+
+    const customerId = team?.customerId ?? (await stripe.customers.create({
       name,
       email,
       metadata: { teamId },
-    });
+    })).id;
 
     const subscription = await stripe.subscriptions.create({
-      customer: customer.id,
+      customer: customerId,
       items: [{ price: priceId }],
       payment_behavior: 'default_incomplete',
       payment_settings: {
@@ -97,7 +99,10 @@ export class BillingService {
 
     await this.prisma.team.update({
       where: { id: teamId },
-      data: { customerId: customer.id, subscriptionId: subscription.id },
+      data: {
+        subscriptionId: subscription.id,
+        ...(!team?.customerId && { customerId }),
+      },
     });
 
     const invoice = subscription.latest_invoice as Stripe.Invoice;
@@ -105,7 +110,7 @@ export class BillingService {
 
     return {
       clientSecret,
-      customerId: customer.id,
+      customerId,
       subscriptionId: subscription.id,
     };
   }
