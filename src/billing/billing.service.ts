@@ -79,6 +79,16 @@ export class BillingService {
 
     const team = await this.prisma.team.findUnique({ where: { id: teamId } });
 
+    if (team?.subscriptionId) {
+      const existing = await stripe.subscriptions.retrieve(team.subscriptionId);
+      if (existing.status === 'active') {
+        throw new BadRequestException('Equipe já possui assinatura ativa. Use o endpoint de upgrade.');
+      }
+      if (existing.status === 'incomplete') {
+        await stripe.subscriptions.cancel(team.subscriptionId);
+      }
+    }
+
     const customerId = team?.customerId ?? (await stripe.customers.create({
       name,
       email,
@@ -113,6 +123,35 @@ export class BillingService {
       customerId,
       subscriptionId: subscription.id,
     };
+  }
+
+  async upgradeSubscription(teamId: string, userId: string, planId: string, period: 'monthly' | 'yearly') {
+    await this.ensureTeamOwner(teamId, userId);
+
+    const team = await this.prisma.team.findUnique({ where: { id: teamId } });
+    if (!team?.subscriptionId) throw new BadRequestException('Nenhuma assinatura ativa encontrada');
+
+    const plan = await this.prisma.plan.findUnique({ where: { id: planId } });
+    if (!plan) throw new NotFoundException('Plano não encontrado');
+
+    const priceId = period === 'yearly' ? plan.idProductYearly : plan.idProductMonthly;
+    if (!priceId) throw new BadRequestException('Preço não configurado para este plano');
+
+    const existing = await stripe.subscriptions.retrieve(team.subscriptionId);
+    if (existing.status !== 'active') throw new BadRequestException('Assinatura não está ativa');
+
+    await stripe.subscriptions.update(team.subscriptionId, {
+      items: [{ id: existing.items.data[0].id, price: priceId }],
+      proration_behavior: 'create_prorations',
+      metadata: { teamId, planId, period },
+    });
+
+    await this.prisma.team.update({
+      where: { id: teamId },
+      data: { planId },
+    });
+
+    return { message: 'Plano atualizado com sucesso' };
   }
 
   async handleWebhook(payload: Buffer, signature: string) {

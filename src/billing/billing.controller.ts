@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Headers, Param, Post, RawBodyRequest, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Patch, Post, RawBodyRequest, Req, UseGuards } from '@nestjs/common';
 import { BillingService } from './billing.service.js';
 import { CreateCheckoutDto } from './dto/create-checkout.dto.js';
+import { UpgradeSubscriptionDto } from './dto/upgrade-subscription.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 
 interface AuthRequest {
@@ -37,6 +38,16 @@ export class BillingController {
       dto.name,
       dto.email,
     );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('teams/:teamId/subscription')
+  upgradeSubscription(
+    @Param('teamId') teamId: string,
+    @Req() req: AuthRequest,
+    @Body() dto: UpgradeSubscriptionDto,
+  ) {
+    return this.billingService.upgradeSubscription(teamId, req.user.id, dto.planId, dto.period);
   }
 
   @Post('webhook')
