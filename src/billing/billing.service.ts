@@ -77,18 +77,13 @@ export class BillingService {
     const priceId = period === 'yearly' ? plan.idProductYearly : plan.idProductMonthly;
     if (!priceId) throw new BadRequestException('Preço não configurado para este plano');
 
-    const team = await this.prisma.team.findUnique({ where: { id: teamId } });
-    const isOnTrial = team?.subscriptionStatus === 'TRIAL' &&
-      team?.subscriptionExpiry != null &&
-      team.subscriptionExpiry.getTime() > Date.now();
-
     const customer = await stripe.customers.create({
       name,
       email,
       metadata: { teamId },
     });
 
-    const subscriptionParams: Stripe.SubscriptionCreateParams = {
+    const subscription = await stripe.subscriptions.create({
       customer: customer.id,
       items: [{ price: priceId }],
       payment_behavior: 'default_incomplete',
@@ -96,48 +91,22 @@ export class BillingService {
         save_default_payment_method: 'on_subscription',
         payment_method_types: ['card'],
       },
-      expand: ['latest_invoice.payment_intent'],
+      expand: ['latest_invoice.confirmation_secret'],
       metadata: { teamId, planId, period },
-    };
-
-    if (isOnTrial && team?.subscriptionExpiry) {
-      const daysLeft = Math.ceil((team.subscriptionExpiry.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-      if (daysLeft > 0) subscriptionParams.trial_period_days = daysLeft;
-    }
-
-    const subscription = await stripe.subscriptions.create(subscriptionParams);
+    });
 
     await this.prisma.team.update({
       where: { id: teamId },
       data: { customerId: customer.id, subscriptionId: subscription.id },
     });
 
-    // Trial ativo → SetupIntent para salvar cartão sem cobrar agora
-    if (isOnTrial) {
-      const setupIntent = await stripe.setupIntents.create({
-        customer: customer.id,
-        payment_method_types: ['card'],
-        usage: 'off_session',
-        metadata: { subscriptionId: subscription.id, planId },
-      });
-
-      return {
-        clientSecret: setupIntent.client_secret,
-        customerId: customer.id,
-        subscriptionId: subscription.id,
-        mode: 'payment',
-      };
-    }
-
-    // Sem trial → PaymentIntent para cobrar imediatamente
     const invoice = subscription.latest_invoice as Stripe.Invoice;
-    const paymentIntent = (invoice as unknown as { payment_intent: Stripe.PaymentIntent }).payment_intent;
+    const clientSecret = invoice.confirmation_secret?.client_secret ?? null;
 
     return {
-      clientSecret: paymentIntent.client_secret,
+      clientSecret,
       customerId: customer.id,
       subscriptionId: subscription.id,
-      mode: 'payment',
     };
   }
 
