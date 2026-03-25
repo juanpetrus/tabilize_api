@@ -1,2 +1,2 @@
 [deploy]
-startCommand = "npm run start:prod"
+startCommand = "npm run seed && npm run start:prod"
