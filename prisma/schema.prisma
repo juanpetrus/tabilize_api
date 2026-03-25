@@ -56,6 +56,11 @@ enum RecurrenceInterval {
   YEARLY
 }
 
+enum BillingCycle {
+  MONTH
+  YEAR
+}
+
 // ─── Auth interna (contador / equipe) ────────────────────────────────────────
 
 model User {
@@ -99,6 +104,7 @@ model Team {
   ownerId            String
   isActive           Boolean   @default(true)
   planId             String?
+  billingCycle       BillingCycle @default(MONTH)
   subscriptionStatus String    @default("INACTIVE")
   subscriptionId     String?
   customerId         String?

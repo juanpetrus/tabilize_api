@@ -9,6 +9,7 @@ import { PrismaService } from '../database';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
+import { BillingCycle } from 'generated/prisma/enums';
 
 @Injectable()
 export class AuthService {
@@ -49,6 +50,7 @@ export class AuthService {
           planId: dto.planId,
           subscriptionStatus: 'TRIAL',
           subscriptionExpiry: trialExpiry,
+          billingCycle: dto.billingCycle as BillingCycle,
           members: {
             create: { userId: newUser.id, role: 'OWNER' },
           },
