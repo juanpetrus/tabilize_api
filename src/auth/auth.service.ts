@@ -41,7 +41,7 @@ export class AuthService {
       });
 
       const trialExpiry = new Date();
-      trialExpiry.setDate(trialExpiry.getDate() + 7);
+      trialExpiry.setDate(trialExpiry.getDate() + 14);
 
       await tx.team.create({
         data: {
