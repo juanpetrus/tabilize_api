@@ -39,6 +39,15 @@ export class TeamsController {
     return this.teamsService.findOne(teamId, req.user.id);
   }
 
+  @Patch(':teamId')
+  updateTeam(
+    @Param('teamId') teamId: string,
+    @Req() req: AuthRequest,
+    @Body('name') name: string,
+  ) {
+    return this.teamsService.updateTeam(teamId, req.user.id, name);
+  }
+
   @Post(':teamId/members')
   inviteMember(
     @Param('teamId') teamId: string,

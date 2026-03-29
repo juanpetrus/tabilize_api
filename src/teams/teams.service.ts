@@ -159,6 +159,20 @@ export class TeamsService {
     });
   }
 
+  async updateTeam(teamId: string, userId: string, name: string) {
+    const team = await this.prisma.team.findFirst({
+      where: { id: teamId, ownerId: userId, isActive: true },
+    });
+
+    if (!team) throw new ForbiddenException('Apenas o dono pode alterar o nome do escritório');
+
+    return this.prisma.team.update({
+      where: { id: teamId },
+      data: { name },
+      select: { id: true, name: true },
+    });
+  }
+
   private async ensureAdminOrOwner(teamId: string, userId: string) {
     const member = await this.prisma.teamMember.findUnique({
       where: { teamId_userId: { teamId, userId }, isActive: true },
