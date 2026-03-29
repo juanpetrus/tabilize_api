@@ -4,8 +4,8 @@
   - Added the required column `boardId` to the `Task` table without a default value. This is not possible if the table is not empty.
 
 */
--- AlterTable
-ALTER TABLE "Task" ADD COLUMN     "boardId" TEXT NOT NULL;
+-- AlterTable (nullable first to support existing rows)
+ALTER TABLE "Task" ADD COLUMN IF NOT EXISTS "boardId" TEXT;
 
 -- CreateTable
 CREATE TABLE "Board" (
