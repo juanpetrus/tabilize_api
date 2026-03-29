@@ -2,13 +2,18 @@ import {
   Injectable,
   ConflictException,
   UnauthorizedException,
+  BadRequestException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { randomBytes } from 'crypto';
 import { PrismaService } from '../database';
+import { MailService } from '../mail/mail.service.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
+import { ForgotPasswordDto } from './dto/forgot-password.dto.js';
+import { ResetPasswordDto } from './dto/reset-password.dto.js';
 import { BillingCycle } from 'generated/prisma/enums';
 
 @Injectable()
@@ -18,6 +23,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly mail: MailService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -31,6 +37,9 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(dto.password, this.saltRounds);
 
+    const trialExpiry = new Date();
+    trialExpiry.setDate(trialExpiry.getDate() + 14);
+
     const user = await this.prisma.$transaction(async (tx) => {
       const newUser = await tx.user.create({
         data: {
@@ -39,9 +48,6 @@ export class AuthService {
           password: hashedPassword,
         },
       });
-
-      const trialExpiry = new Date();
-      trialExpiry.setDate(trialExpiry.getDate() + 14);
 
       await tx.team.create({
         data: {
@@ -60,8 +66,55 @@ export class AuthService {
       return newUser;
     });
 
+    this.mail.sendWelcome(user.email, user.name, trialExpiry).catch(() => null);
+
     const token = this.generateToken(user.id, user.email);
     return this.formatAuthResponse(user, token);
+  }
+
+  async forgotPassword(dto: ForgotPasswordDto) {
+    const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
+
+    // Não revela se o email existe
+    if (!user || !user.isActive) return { message: 'Se o email existir, você receberá as instruções.' };
+
+    const token = randomBytes(32).toString('hex');
+    const expiry = new Date(Date.now() + 1000 * 60 * 60); // 1 hora
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { passwordResetToken: token, passwordResetExpiry: expiry },
+    });
+
+    const resetUrl = `${process.env['FRONTEND_URL']}/reset-password?token=${token}`;
+    this.mail.sendForgotPassword(user.email, user.name, resetUrl).catch(() => null);
+
+    return { message: 'Se o email existir, você receberá as instruções.' };
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        passwordResetToken: dto.token,
+        passwordResetExpiry: { gt: new Date() },
+        isActive: true,
+      },
+    });
+
+    if (!user) throw new BadRequestException('Token inválido ou expirado');
+
+    const hashedPassword = await bcrypt.hash(dto.password, this.saltRounds);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+        passwordResetToken: null,
+        passwordResetExpiry: null,
+      },
+    });
+
+    return { message: 'Senha redefinida com sucesso' };
   }
 
   async login(dto: LoginDto) {

@@ -1,12 +1,16 @@
 import { Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import Stripe from 'stripe';
 import { PrismaService } from '../database/index.js';
+import { MailService } from '../mail/mail.service.js';
 
 const stripe = new Stripe(process.env['STRIPE_SECRET_KEY'] ?? '');
 
 @Injectable()
 export class BillingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mail: MailService,
+  ) {}
 
   getPlans() {
     return this.prisma.plan.findMany({
@@ -257,6 +261,10 @@ export class BillingService {
       if (subscription.status === 'trialing') {
         status = 'TRIAL';
         expiry = subscription.trial_end ? new Date(subscription.trial_end * 1000) : null;
+        const owner = await this.getTeamOwner(teamId);
+        if (owner && expiry) {
+          this.mail.sendTrialCardSaved(owner.email, owner.name, expiry).catch(() => null);
+        }
       } else if (subscription.status === 'active') {
         status = 'ACTIVE';
         const item = subscription.items.data[0];
@@ -299,6 +307,11 @@ export class BillingService {
           ...(planId ? { planId } : {}),
         },
       });
+
+      const owner = await this.getTeamOwner(teamId);
+      if (owner && expiry) {
+        this.mail.sendSubscriptionActive(owner.email, owner.name, expiry).catch(() => null);
+      }
     }
 
     if (event.type === 'invoice.payment_failed') {
@@ -312,18 +325,43 @@ export class BillingService {
         where: { id: teamId },
         data: { subscriptionStatus: 'OVERDUE' },
       });
+
+      const owner = await this.getTeamOwner(teamId);
+      if (owner) {
+        this.mail.sendPaymentFailed(owner.email, owner.name).catch(() => null);
+      }
     }
 
     if (event.type === 'customer.subscription.deleted') {
       const subscription = event.data.object as Stripe.Subscription;
+      const teamId = subscription.metadata?.['teamId'];
 
       await this.prisma.team.updateMany({
         where: { subscriptionId: subscription.id },
         data: { subscriptionStatus: 'INACTIVE' },
       });
+
+      if (teamId) {
+        const item = subscription.items.data[0];
+        const expiry = item?.current_period_end
+          ? new Date(item.current_period_end * 1000)
+          : new Date();
+        const owner = await this.getTeamOwner(teamId);
+        if (owner) {
+          this.mail.sendSubscriptionCancelled(owner.email, owner.name, expiry).catch(() => null);
+        }
+      }
     }
 
     return { received: true };
+  }
+
+  private async getTeamOwner(teamId: string) {
+    const team = await this.prisma.team.findUnique({
+      where: { id: teamId },
+      select: { owner: { select: { email: true, name: true } } },
+    });
+    return team?.owner ?? null;
   }
 
   private async ensureTeamOwner(teamId: string, userId: string) {
