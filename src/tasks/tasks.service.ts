@@ -4,6 +4,7 @@ import { CreateTaskDto } from './dto/create-task.dto.js';
 import { UpdateTaskDto } from './dto/update-task.dto.js';
 
 const taskInclude = {
+  board: { select: { id: true, name: true } },
   company: { select: { id: true, name: true } },
   creator: { select: { id: true, name: true, email: true } },
   assignee: { select: { id: true, name: true, email: true } },
@@ -15,6 +16,7 @@ export class TasksService {
 
   async create(teamId: string, userId: string, dto: CreateTaskDto) {
     await this.ensureTeamMember(teamId, userId);
+    await this.ensureBoardBelongsToTeam(teamId, dto.boardId);
 
     if (dto.companyId) {
       await this.ensureCompanyBelongsToTeam(teamId, dto.companyId);
@@ -23,6 +25,7 @@ export class TasksService {
     return this.prisma.task.create({
       data: {
         teamId,
+        boardId: dto.boardId,
         companyId: dto.companyId,
         creatorId: userId,
         title: dto.title,
@@ -35,13 +38,14 @@ export class TasksService {
     });
   }
 
-  async findAllByTeam(teamId: string, userId: string, companyId?: string, assigneeId?: string) {
+  async findAllByTeam(teamId: string, userId: string, boardId?: string, companyId?: string, assigneeId?: string) {
     await this.ensureTeamMember(teamId, userId);
 
     return this.prisma.task.findMany({
       where: {
         teamId,
         isActive: true,
+        ...(boardId ? { boardId } : {}),
         ...(companyId ? { companyId } : {}),
         ...(assigneeId ? { assigneeId } : {}),
       },
@@ -95,6 +99,14 @@ export class TasksService {
       where: { id: taskId },
       data: { isActive: false },
     });
+  }
+
+  private async ensureBoardBelongsToTeam(teamId: string, boardId: string) {
+    const board = await this.prisma.board.findFirst({
+      where: { id: boardId, teamId, isActive: true },
+    });
+
+    if (!board) throw new BadRequestException('Setor não encontrado neste escritório');
   }
 
   private async ensureCompanyBelongsToTeam(teamId: string, companyId: string) {

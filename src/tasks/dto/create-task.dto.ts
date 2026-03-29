@@ -2,6 +2,9 @@ import { IsString, IsNotEmpty, IsOptional, IsEnum, IsDateString, IsUUID } from '
 import { TaskPriority } from '../../../generated/prisma/enums.js';
 
 export class CreateTaskDto {
+  @IsUUID()
+  boardId: string;
+
   @IsString()
   @IsNotEmpty()
   title: string;

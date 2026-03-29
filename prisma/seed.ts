@@ -36,6 +36,18 @@ async function main() {
     },
   });
 
+  await prisma.plan.upsert({
+    where: { id: 'plan_scale' },
+    update: {},
+    create: {
+      id: 'plan_scale',
+      name: 'Scale',
+      description: 'Solução personalizada para grandes escritórios',
+      features: ['Tudo do Pro', 'Volume personalizado', 'Integrações sob medida', 'Gerente de conta dedicado', 'SLA garantido'],
+      url: 'https://wa.me/5569999222517',
+    },
+  });
+
   console.log('Planos criados com sucesso.');
 }
 

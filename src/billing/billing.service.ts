@@ -11,7 +11,7 @@ export class BillingService {
   getPlans() {
     return this.prisma.plan.findMany({
       where: { isActive: true },
-      select: { id: true, name: true, description: true, priceMonthly: true, priceYearly: true, features: true },
+      select: { id: true, name: true, description: true, priceMonthly: true, priceYearly: true, features: true, url: true },
       orderBy: { priceMonthly: 'asc' },
     });
   }
@@ -26,6 +26,7 @@ export class BillingService {
         subscriptionStatus: true,
         subscriptionExpiry: true,
         subscriptionId: true,
+        billingCycle: true,
         plan: {
           select: { id: true, name: true, description: true, priceMonthly: true, priceYearly: true, features: true },
         },
@@ -56,6 +57,7 @@ export class BillingService {
       subscriptionStatus: team?.subscriptionStatus ?? 'INACTIVE',
       subscriptionExpiry: team?.subscriptionExpiry ?? null,
       subscriptionId: team?.subscriptionId ?? null,
+      billingCycle: team?.billingCycle,
       current_plan: team?.plan ?? null,
       stripe: stripeSubscription,
     };
@@ -81,10 +83,10 @@ export class BillingService {
 
     if (team?.subscriptionId) {
       const existing = await stripe.subscriptions.retrieve(team.subscriptionId);
-      if (existing.status === 'active') {
+      if (['active', 'trialing'].includes(existing.status)) {
         throw new BadRequestException('Equipe já possui assinatura ativa. Use o endpoint de upgrade.');
       }
-      if (existing.status === 'incomplete') {
+      if (['incomplete', 'past_due'].includes(existing.status)) {
         await stripe.subscriptions.cancel(team.subscriptionId);
       }
     }
@@ -98,12 +100,13 @@ export class BillingService {
     const subscription = await stripe.subscriptions.create({
       customer: customerId,
       items: [{ price: priceId }],
+      trial_period_days: 14,
       payment_behavior: 'default_incomplete',
       payment_settings: {
         save_default_payment_method: 'on_subscription',
         payment_method_types: ['card'],
       },
-      expand: ['latest_invoice.confirmation_secret'],
+      expand: ['pending_setup_intent'],
       metadata: { teamId, planId, period },
     });
 
@@ -115,14 +118,90 @@ export class BillingService {
       },
     });
 
-    const invoice = subscription.latest_invoice as Stripe.Invoice;
-    const clientSecret = invoice.confirmation_secret?.client_secret ?? null;
+    const setupIntent = subscription.pending_setup_intent as Stripe.SetupIntent;
+    const clientSecret = setupIntent?.client_secret ?? null;
 
     return {
       clientSecret,
+      mode: 'setup',
       customerId,
       subscriptionId: subscription.id,
     };
+  }
+
+  async cancelSubscription(teamId: string, userId: string) {
+    await this.ensureTeamOwner(teamId, userId);
+
+    const team = await this.prisma.team.findUnique({
+      where: { id: teamId },
+      select: { subscriptionId: true },
+    });
+
+    if (!team?.subscriptionId) throw new BadRequestException('Nenhuma assinatura ativa encontrada');
+
+    const subscription = await stripe.subscriptions.retrieve(team.subscriptionId);
+    if (!['active', 'trialing'].includes(subscription.status)) {
+      throw new BadRequestException('Assinatura não pode ser cancelada no estado atual');
+    }
+
+    await stripe.subscriptions.update(team.subscriptionId, {
+      cancel_at_period_end: true,
+    });
+
+    return { message: 'Assinatura será cancelada ao fim do período atual' };
+  }
+
+  async reactivateSubscription(teamId: string, userId: string) {
+    await this.ensureTeamOwner(teamId, userId);
+
+    const team = await this.prisma.team.findUnique({
+      where: { id: teamId },
+      select: { subscriptionId: true, customerId: true },
+    });
+
+    if (!team?.subscriptionId) throw new BadRequestException('Nenhuma assinatura encontrada');
+
+    const subscription = await stripe.subscriptions.retrieve(team.subscriptionId);
+
+    // Cancelamento agendado — só remove o agendamento
+    if (subscription.cancel_at_period_end) {
+      await stripe.subscriptions.update(team.subscriptionId, {
+        cancel_at_period_end: false,
+      });
+
+      return { message: 'Cancelamento revertido. Assinatura continua ativa.' };
+    }
+
+    throw new BadRequestException('Assinatura já foi cancelada. Realize um novo checkout para assinar novamente.');
+  }
+
+  async getInvoices(teamId: string, userId: string) {
+    await this.ensureTeamOwner(teamId, userId);
+
+    const team = await this.prisma.team.findUnique({
+      where: { id: teamId },
+      select: { customerId: true },
+    });
+
+    if (!team?.customerId) return [];
+
+    const invoices = await stripe.invoices.list({
+      customer: team.customerId,
+      limit: 24,
+    });
+
+    return invoices.data.map((inv) => ({
+      id: inv.id,
+      number: inv.number,
+      status: inv.status,
+      amount: inv.amount_paid,
+      currency: inv.currency,
+      pdfUrl: inv.invoice_pdf,
+      hostedUrl: inv.hosted_invoice_url,
+      periodStart: inv.period_start ? new Date(inv.period_start * 1000) : null,
+      periodEnd: inv.period_end ? new Date(inv.period_end * 1000) : null,
+      createdAt: new Date(inv.created * 1000),
+    }));
   }
 
   async upgradeSubscription(teamId: string, userId: string, planId: string, period: 'monthly' | 'yearly') {
@@ -165,6 +244,39 @@ export class BillingService {
       throw new BadRequestException('Webhook inválido');
     }
 
+    if (event.type === 'customer.subscription.updated') {
+      const subscription = event.data.object as Stripe.Subscription;
+      const teamId = subscription.metadata?.['teamId'];
+      const planId = subscription.metadata?.['planId'];
+
+      if (!teamId) return { received: true };
+
+      let status = 'INACTIVE';
+      let expiry: Date | null = null;
+
+      if (subscription.status === 'trialing') {
+        status = 'TRIAL';
+        expiry = subscription.trial_end ? new Date(subscription.trial_end * 1000) : null;
+      } else if (subscription.status === 'active') {
+        status = 'ACTIVE';
+        const item = subscription.items.data[0];
+        expiry = item ? new Date(item.current_period_end * 1000) : null;
+      } else if (subscription.status === 'past_due') {
+        status = 'OVERDUE';
+      } else if (subscription.status === 'canceled') {
+        status = 'INACTIVE';
+      }
+
+      await this.prisma.team.update({
+        where: { id: teamId },
+        data: {
+          subscriptionStatus: status,
+          ...(expiry ? { subscriptionExpiry: expiry } : {}),
+          ...(planId && status === 'ACTIVE' ? { planId } : {}),
+        },
+      });
+    }
+
     if (event.type === 'invoice.paid') {
       const invoice = event.data.object as Stripe.Invoice;
       const parent = invoice.parent as { subscription_details?: { subscription?: string; metadata?: Record<string, string> } } | null;
@@ -174,17 +286,31 @@ export class BillingService {
 
       if (!teamId || !subscriptionId) return { received: true };
 
-      const expiry = new Date();
-      expiry.setMonth(expiry.getMonth() + 1);
+      const sub = await stripe.subscriptions.retrieve(subscriptionId);
+      const item = sub.items.data[0];
+      const expiry = item ? new Date(item.current_period_end * 1000) : null;
 
       await this.prisma.team.update({
         where: { id: teamId },
         data: {
           subscriptionStatus: 'ACTIVE',
           subscriptionId,
-          subscriptionExpiry: expiry,
+          ...(expiry ? { subscriptionExpiry: expiry } : {}),
           ...(planId ? { planId } : {}),
         },
+      });
+    }
+
+    if (event.type === 'invoice.payment_failed') {
+      const invoice = event.data.object as Stripe.Invoice;
+      const parent = invoice.parent as { subscription_details?: { metadata?: Record<string, string> } } | null;
+      const teamId = parent?.subscription_details?.metadata?.['teamId'];
+
+      if (!teamId) return { received: true };
+
+      await this.prisma.team.update({
+        where: { id: teamId },
+        data: { subscriptionStatus: 'OVERDUE' },
       });
     }
 

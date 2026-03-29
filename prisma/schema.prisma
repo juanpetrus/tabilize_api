@@ -84,11 +84,12 @@ model Plan {
   id                 String   @id
   name               String
   description        String
-  priceMonthly       Int
-  priceYearly        Int
+  priceMonthly       Int?
+  priceYearly        Int?
   features           String[]
   idProductMonthly   String?
   idProductYearly    String?
+  url                String?
   isActive           Boolean  @default(true)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -116,6 +117,7 @@ model Team {
   plan      Plan?        @relation(fields: [planId], references: [id])
   members   TeamMember[]
   companies Company[]
+  boards    Board[]
   tasks     Task[]
 }
 
@@ -189,11 +191,26 @@ model Document {
   company Company @relation(fields: [companyId], references: [id])
 }
 
+// ─── Quadros / Setores ───────────────────────────────────────────────────────
+
+model Board {
+  id        String   @id @default(uuid())
+  teamId    String
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team  Team   @relation(fields: [teamId], references: [id])
+  tasks Task[]
+}
+
 // ─── Tarefas ─────────────────────────────────────────────────────────────────
 
 model Task {
   id          String       @id @default(uuid())
   teamId      String
+  boardId     String
   companyId   String?
   title       String
   description String?
@@ -206,10 +223,11 @@ model Task {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
-  team     Team    @relation(fields: [teamId], references: [id])
+  team     Team     @relation(fields: [teamId], references: [id])
+  board    Board    @relation(fields: [boardId], references: [id])
   company  Company? @relation(fields: [companyId], references: [id])
-  assignee User?   @relation("TaskAssignee", fields: [assigneeId], references: [id])
-  creator  User    @relation("TaskCreator", fields: [creatorId], references: [id])
+  assignee User?    @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  creator  User     @relation("TaskCreator", fields: [creatorId], references: [id])
 }
 
 // ─── Pedidos / Solicitações do cliente ───────────────────────────────────────

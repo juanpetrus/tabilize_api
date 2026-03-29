@@ -26,10 +26,11 @@ export class TasksController {
   findAll(
     @Param('teamId') teamId: string,
     @Req() req: AuthRequest,
+    @Query('boardId') boardId?: string,
     @Query('companyId') companyId?: string,
     @Query('assigneeId') assigneeId?: string,
   ) {
-    return this.tasksService.findAllByTeam(teamId, req.user.id, companyId, assigneeId);
+    return this.tasksService.findAllByTeam(teamId, req.user.id, boardId, companyId, assigneeId);
   }
 
   @Get(':taskId')

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Patch, Post, RawBodyRequest, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, RawBodyRequest, Req, UseGuards } from '@nestjs/common';
 import { BillingService } from './billing.service.js';
 import { CreateCheckoutDto } from './dto/create-checkout.dto.js';
 import { UpgradeSubscriptionDto } from './dto/upgrade-subscription.dto.js';
@@ -38,6 +38,24 @@ export class BillingController {
       dto.name,
       dto.email,
     );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('teams/:teamId/subscription/reactivate')
+  reactivateSubscription(@Param('teamId') teamId: string, @Req() req: AuthRequest) {
+    return this.billingService.reactivateSubscription(teamId, req.user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('teams/:teamId/subscription')
+  cancelSubscription(@Param('teamId') teamId: string, @Req() req: AuthRequest) {
+    return this.billingService.cancelSubscription(teamId, req.user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('teams/:teamId/invoices')
+  getInvoices(@Param('teamId') teamId: string, @Req() req: AuthRequest) {
+    return this.billingService.getInvoices(teamId, req.user.id);
   }
 
   @UseGuards(JwtAuthGuard)
