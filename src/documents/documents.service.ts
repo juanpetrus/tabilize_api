@@ -101,10 +101,11 @@ export class DocumentsService {
 
     if (!doc) throw new NotFoundException('Documento não encontrado');
 
-    return this.prisma.document.update({
-      where: { id: documentId },
-      data: { isActive: false },
-    });
+    if (doc.fileUrl) {
+      await this.storage.delete(doc.fileUrl).catch(() => null);
+    }
+
+    return this.prisma.document.delete({ where: { id: documentId } });
   }
 
   private async ensureAccess(teamId: string, companyId: string, userId: string) {

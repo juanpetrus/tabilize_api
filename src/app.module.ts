@@ -11,6 +11,7 @@ import { DocumentsModule } from './documents/documents.module.js';
 import { TasksModule } from './tasks/tasks.module.js';
 import { BoardsModule } from './boards/boards.module.js';
 import { MailModule } from './mail/mail.module.js';
+import { DriveModule } from './drive/drive.module.js';
 import { ServiceRequestsModule } from './service-requests/service-requests.module.js';
 import { PaymentsModule } from './payments/payments.module.js';
 import { BillingModule } from './billing/billing.module.js';
@@ -27,6 +28,7 @@ import { SubscriptionGuard } from './billing/subscription.guard.js';
     TasksModule,
     BoardsModule,
     MailModule,
+    DriveModule,
     ServiceRequestsModule,
     PaymentsModule,
     BillingModule,

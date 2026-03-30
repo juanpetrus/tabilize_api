@@ -119,8 +119,9 @@ model Team {
   plan      Plan?        @relation(fields: [planId], references: [id])
   members   TeamMember[]
   companies Company[]
-  boards    Board[]
-  tasks     Task[]
+  boards     Board[]
+  tasks      Task[]
+  driveFiles DriveFile[]
 }
 
 model TeamMember {
@@ -191,6 +192,22 @@ model Document {
   updatedAt   DateTime     @updatedAt
 
   company Company @relation(fields: [companyId], references: [id])
+}
+
+// ─── Drive interno do contador ───────────────────────────────────────────────
+
+model DriveFile {
+  id        String   @id @default(uuid())
+  teamId    String
+  name      String
+  fileUrl   String
+  mimeType  String?
+  size      Int?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team Team @relation(fields: [teamId], references: [id])
 }
 
 // ─── Quadros / Setores ───────────────────────────────────────────────────────
