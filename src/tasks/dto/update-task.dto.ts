@@ -25,4 +25,8 @@ export class UpdateTaskDto {
   @IsOptional()
   @IsUUID()
   assigneeId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  parentId?: string | null;
 }

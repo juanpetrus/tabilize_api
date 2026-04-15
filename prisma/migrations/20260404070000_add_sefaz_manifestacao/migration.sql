@@ -1,0 +1,1 @@
+ALTER TABLE "SefazNFe" ADD COLUMN IF NOT EXISTS "manifestacao" TEXT;

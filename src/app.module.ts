@@ -12,10 +12,12 @@ import { TasksModule } from './tasks/tasks.module.js';
 import { BoardsModule } from './boards/boards.module.js';
 import { MailModule } from './mail/mail.module.js';
 import { DriveModule } from './drive/drive.module.js';
+import { CertificatesModule } from './certificates/certificates.module.js';
 import { ServiceRequestsModule } from './service-requests/service-requests.module.js';
 import { PaymentsModule } from './payments/payments.module.js';
 import { BillingModule } from './billing/billing.module.js';
 import { SubscriptionGuard } from './billing/subscription.guard.js';
+import { SefazModule } from './sefaz/sefaz.module.js';
 
 @Module({
   imports: [
@@ -29,9 +31,11 @@ import { SubscriptionGuard } from './billing/subscription.guard.js';
     BoardsModule,
     MailModule,
     DriveModule,
+    CertificatesModule,
     ServiceRequestsModule,
     PaymentsModule,
     BillingModule,
+    SefazModule,
   ],
   controllers: [AppController],
   providers: [
