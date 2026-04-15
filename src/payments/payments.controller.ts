@@ -50,6 +50,17 @@ export class PaymentsController {
     return this.paymentsService.findAllByCompany(teamId, companyId, req.user.id);
   }
 
+  @Patch(':paymentId')
+  update(
+    @Param('teamId') teamId: string,
+    @Param('companyId') companyId: string,
+    @Param('paymentId') paymentId: string,
+    @Req() req: AuthRequest,
+    @Body() dto: { description?: string; amount?: number; dueDate?: string; referenceMonth?: string | null },
+  ) {
+    return this.paymentsService.update(teamId, companyId, paymentId, req.user.id, dto);
+  }
+
   @Patch(':paymentId/status')
   updateStatus(
     @Param('teamId') teamId: string,

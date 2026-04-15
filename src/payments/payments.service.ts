@@ -98,7 +98,34 @@ export class PaymentsService {
       where: { id: paymentId },
       data: {
         status: dto.status,
-        paidAt: dto.status === PaymentStatus.PAID ? new Date() : null,
+        paidAt: dto.status === PaymentStatus.PAID
+          ? (dto.paidAt ? new Date(dto.paidAt) : new Date())
+          : null,
+      },
+    });
+  }
+
+  async update(
+    teamId: string,
+    companyId: string,
+    paymentId: string,
+    userId: string,
+    dto: { description?: string; amount?: number; dueDate?: string; referenceMonth?: string | null },
+  ) {
+    await this.ensureAccess(teamId, companyId, userId);
+
+    const payment = await this.prisma.payment.findFirst({
+      where: { id: paymentId, companyId, isActive: true },
+    });
+    if (!payment) throw new NotFoundException('Cobrança não encontrada');
+
+    return this.prisma.payment.update({
+      where: { id: paymentId },
+      data: {
+        ...(dto.description !== undefined && { description: dto.description }),
+        ...(dto.amount !== undefined && { amount: dto.amount }),
+        ...(dto.dueDate !== undefined && { dueDate: new Date(dto.dueDate) }),
+        ...(dto.referenceMonth !== undefined && { referenceMonth: dto.referenceMonth }),
       },
     });
   }
