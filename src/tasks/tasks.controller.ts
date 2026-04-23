@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuard
 import { TasksService } from './tasks.service.js';
 import { CreateTaskDto } from './dto/create-task.dto.js';
 import { UpdateTaskDto } from './dto/update-task.dto.js';
+import { ReorderTasksDto } from './dto/reorder-tasks.dto.js';
 import { CreateChecklistItemDto } from './dto/create-checklist-item.dto.js';
 import { UpdateChecklistItemDto } from './dto/update-checklist-item.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
@@ -34,6 +35,15 @@ export class TasksController {
     @Query('includeSubtasks') includeSubtasks?: string,
   ) {
     return this.tasksService.findAllByTeam(teamId, req.user.id, boardId, companyId, assigneeId, includeSubtasks === 'true');
+  }
+
+  @Patch('reorder')
+  reorder(
+    @Param('teamId') teamId: string,
+    @Req() req: AuthRequest,
+    @Body() dto: ReorderTasksDto,
+  ) {
+    return this.tasksService.reorder(teamId, req.user.id, dto);
   }
 
   @Get(':taskId')

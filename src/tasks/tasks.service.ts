@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException, BadRequestException 
 import { PrismaService } from '../database/index.js';
 import { CreateTaskDto } from './dto/create-task.dto.js';
 import { UpdateTaskDto } from './dto/update-task.dto.js';
+import { ReorderTasksDto } from './dto/reorder-tasks.dto.js';
 import { CreateChecklistItemDto } from './dto/create-checklist-item.dto.js';
 import { UpdateChecklistItemDto } from './dto/update-checklist-item.dto.js';
 
@@ -41,6 +42,11 @@ export class TasksService {
       await this.ensureParentTaskExists(teamId, dto.parentId, dto.boardId);
     }
 
+    const maxOrder = await this.prisma.task.aggregate({
+      where: { boardId: dto.boardId, status: 'PENDING', parentId: null, isActive: true },
+      _max: { order: true },
+    });
+
     return this.prisma.task.create({
       data: {
         teamId,
@@ -53,6 +59,7 @@ export class TasksService {
         priority: dto.priority,
         assigneeId: dto.assigneeId,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
+        order: (maxOrder._max.order ?? -1) + 1,
       },
       include: taskInclude,
     });
@@ -71,7 +78,7 @@ export class TasksService {
         ...(assigneeId ? { assigneeId } : {}),
       },
       include: taskInclude,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
     });
   }
 
@@ -140,6 +147,34 @@ export class TasksService {
       where: { id: taskId },
       data: { isActive: false },
     });
+  }
+
+  async reorder(teamId: string, userId: string, dto: ReorderTasksDto) {
+    await this.ensureTeamMember(teamId, userId);
+
+    const ids = dto.items.map(i => i.id);
+    const found = await this.prisma.task.findMany({
+      where: { id: { in: ids }, teamId, isActive: true },
+      select: { id: true },
+    });
+
+    if (found.length !== ids.length) {
+      throw new BadRequestException('Uma ou mais tarefas não foram encontradas');
+    }
+
+    await this.prisma.$transaction(
+      dto.items.map(item =>
+        this.prisma.task.update({
+          where: { id: item.id },
+          data: {
+            order: item.order,
+            ...(item.status !== undefined ? { status: item.status } : {}),
+          },
+        }),
+      ),
+    );
+
+    return { success: true };
   }
 
   private async ensureBoardBelongsToTeam(teamId: string, boardId: string) {
