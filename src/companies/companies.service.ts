@@ -33,7 +33,7 @@ export class CompaniesService {
     return this.prisma.company.findMany({
       where: { teamId, isActive: true },
       include: {
-        _count: { select: { tasks: true, documents: true, serviceRequests: true } },
+        _count: { select: { tasks: true, driveShares: true, serviceRequests: true } },
       },
       orderBy: { name: 'asc' },
     });
@@ -45,7 +45,7 @@ export class CompaniesService {
     const company = await this.prisma.company.findFirst({
       where: { id: companyId, teamId, isActive: true },
       include: {
-        _count: { select: { tasks: true, documents: true, serviceRequests: true } },
+        _count: { select: { tasks: true, driveShares: true, serviceRequests: true } },
         companyUsers: {
           where: { isActive: true },
           select: { id: true, name: true, email: true, createdAt: true },

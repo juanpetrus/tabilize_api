@@ -7,7 +7,6 @@ import { AuthModule } from './auth';
 import { TeamsModule } from './teams/teams.module.js';
 import { CompaniesModule } from './companies/companies.module.js';
 import { ClientAuthModule } from './client-auth/client-auth.module.js';
-import { DocumentsModule } from './documents/documents.module.js';
 import { TasksModule } from './tasks/tasks.module.js';
 import { BoardsModule } from './boards/boards.module.js';
 import { MailModule } from './mail/mail.module.js';
@@ -26,11 +25,10 @@ import { SefazModule } from './sefaz/sefaz.module.js';
     TeamsModule,
     CompaniesModule,
     ClientAuthModule,
-    DocumentsModule,
+    DriveModule,
     TasksModule,
     BoardsModule,
     MailModule,
-    DriveModule,
     CertificatesModule,
     ServiceRequestsModule,
     PaymentsModule,

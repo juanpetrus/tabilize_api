@@ -121,7 +121,7 @@ model Team {
   companies Company[]
   boards     Board[]
   tasks      Task[]
-  driveFiles DriveFile[]
+  driveItems DriveItem[]
 }
 
 model TeamMember {
@@ -157,7 +157,7 @@ model Company {
 
   team            Team                @relation(fields: [teamId], references: [id])
   companyUsers    CompanyUser[]
-  documents       Document[]
+  driveShares     DriveItemShare[]
   tasks           Task[]
   serviceRequests ServiceRequest[]
   payments        Payment[]
@@ -182,21 +182,49 @@ model CompanyUser {
   serviceRequests ServiceRequest[]
 }
 
-// ─── Documentos ──────────────────────────────────────────────────────────────
+// ─── Drive Unificado ──────────────────────────────────────────────────────────
 
-model Document {
-  id          String       @id @default(uuid())
-  companyId   String
+model DriveItem {
+  id          String  @id @default(uuid())
+  teamId      String
   name        String
-  type        DocumentType
-  fileUrl     String?
-  description String?
-  dueDate     DateTime?
-  isActive    Boolean      @default(true)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  path        String  // "/DAS/2024/Janeiro" ou "/DAS/2024/Janeiro/arquivo.pdf"
+  isDirectory Boolean @default(false)
 
-  company Company @relation(fields: [companyId], references: [id])
+  // Metadados do arquivo (quando isDirectory = false)
+  fileUrl  String?
+  mimeType String?
+  size     Int?
+
+  // Campos extras
+  description     String?
+  competenceMonth Int? // 1-12 (para DAS, boletos, etc)
+  competenceYear  Int? // 2024, 2025...
+
+  // Controle
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team   Team             @relation(fields: [teamId], references: [id])
+  shares DriveItemShare[]
+
+  @@unique([teamId, path])
+  @@index([teamId, path])
+}
+
+// Compartilhamento com empresas específicas
+model DriveItemShare {
+  id          String   @id @default(uuid())
+  driveItemId String
+  companyId   String
+  canUpload   Boolean  @default(false) // Cliente pode fazer upload nessa pasta
+  createdAt   DateTime @default(now())
+
+  driveItem DriveItem @relation(fields: [driveItemId], references: [id], onDelete: Cascade)
+  company   Company   @relation(fields: [companyId], references: [id])
+
+  @@unique([driveItemId, companyId])
 }
 
 // ─── Certificado digital da empresa ──────────────────────────────────────────
@@ -262,22 +290,6 @@ model SefazEvento {
   nfe     SefazNFe?  @relation(fields: [nfeId], references: [id])
 
   @@unique([companyId, nsu])
-}
-
-// ─── Drive interno do contador ───────────────────────────────────────────────
-
-model DriveFile {
-  id        String   @id @default(uuid())
-  teamId    String
-  name      String
-  fileUrl   String
-  mimeType  String?
-  size      Int?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  team Team @relation(fields: [teamId], references: [id])
 }
 
 // ─── Quadros / Setores ───────────────────────────────────────────────────────
