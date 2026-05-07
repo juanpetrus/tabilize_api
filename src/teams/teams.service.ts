@@ -34,15 +34,24 @@ export class TeamsService {
   }
 
   async findMyTeams(userId: string) {
-    return this.prisma.team.findMany({
+    const teams = await this.prisma.team.findMany({
       where: {
         isActive: true,
         members: { some: { userId, isActive: true } },
       },
       include: {
         _count: { select: { members: true, companies: true } },
+        members: {
+          where: { userId, isActive: true },
+          select: { role: true },
+        },
       },
     });
+
+    return teams.map(({ members, ...team }) => ({
+      ...team,
+      role: members[0]?.role ?? null,
+    }));
   }
 
   async findOne(teamId: string, userId: string) {

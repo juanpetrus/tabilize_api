@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/commo
 import { PrismaService } from '../database/index.js';
 import { CreatePaymentDto } from './dto/create-payment.dto.js';
 import { UpdatePaymentStatusDto } from './dto/update-payment-status.dto.js';
-import { PaymentStatus, RecurrenceInterval } from '../../generated/prisma/enums.js';
+import { PaymentStatus, RecurrenceInterval, TeamRole } from '../../generated/prisma/enums.js';
 import { randomUUID } from 'crypto';
 
 @Injectable()
@@ -169,6 +169,9 @@ export class PaymentsService {
       where: { teamId_userId: { teamId, userId }, isActive: true },
     });
     if (!member) throw new ForbiddenException('Você não é membro dessa equipe');
+    if (member.role !== TeamRole.OWNER && member.role !== TeamRole.ADMIN) {
+      throw new ForbiddenException('Acesso ao financeiro restrito a OWNER e ADMIN');
+    }
 
     const company = await this.prisma.company.findFirst({
       where: { id: companyId, teamId, isActive: true },
@@ -181,6 +184,9 @@ export class PaymentsService {
       where: { teamId_userId: { teamId, userId }, isActive: true },
     });
     if (!member) throw new ForbiddenException('Você não é membro dessa equipe');
+    if (member.role !== TeamRole.OWNER && member.role !== TeamRole.ADMIN) {
+      throw new ForbiddenException('Acesso ao financeiro restrito a OWNER e ADMIN');
+    }
   }
 
   private async ensureCompanyUser(companyId: string, companyUserId: string) {
