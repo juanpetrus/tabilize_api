@@ -552,10 +552,26 @@ export class DriveService {
   }
 
   private async ensureCompanyUser(companyId: string, companyUserId: string) {
+    // Verifica se é a empresa padrão do usuário
     const companyUser = await this.prisma.companyUser.findFirst({
       where: { id: companyUserId, companyId, isActive: true },
     });
 
-    if (!companyUser) throw new ForbiddenException('Acesso negado');
+    if (companyUser) return;
+
+    // Verifica se o usuário está vinculado à empresa
+    const link = await this.prisma.companyUserCompany.findUnique({
+      where: {
+        companyUserId_companyId: { companyUserId, companyId },
+      },
+      include: {
+        companyUser: { select: { isActive: true } },
+        company: { select: { isActive: true } },
+      },
+    });
+
+    if (!link || !link.companyUser.isActive || !link.company.isActive) {
+      throw new ForbiddenException('Acesso negado');
+    }
   }
 }

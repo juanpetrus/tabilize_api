@@ -155,31 +155,51 @@ model Company {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  team            Team                @relation(fields: [teamId], references: [id])
-  companyUsers    CompanyUser[]
-  driveShares     DriveItemShare[]
-  tasks           Task[]
-  serviceRequests ServiceRequest[]
-  payments        Payment[]
-  certificate     CompanyCertificate?
-  sefazNFes       SefazNFe[]
-  sefazEventos    SefazEvento[]
+  team               Team                 @relation(fields: [teamId], references: [id])
+  companyUsers       CompanyUser[]
+  activeForUsers     CompanyUser[]        @relation("ActiveCompany")
+  companyUserLinks   CompanyUserCompany[] // Usuários do portal com acesso
+  driveShares        DriveItemShare[]
+  tasks              Task[]
+  serviceRequests    ServiceRequest[]
+  payments           Payment[]
+  certificate        CompanyCertificate?
+  sefazNFes          SefazNFe[]
+  sefazEventos       SefazEvento[]
 }
 
 // ─── Portal cliente (login da empresa) ───────────────────────────────────────
 
 model CompanyUser {
-  id        String   @id @default(uuid())
-  companyId String
-  name      String
-  email     String   @unique
-  password  String
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                 String   @id @default(uuid())
+  companyId          String   // Empresa padrão (backward compatibility)
+  activeCompanyId    String?  // Empresa ativa atual (pode ser diferente da padrão)
+  name               String
+  email              String   @unique
+  password           String
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  company         Company          @relation(fields: [companyId], references: [id])
+  company         Company               @relation(fields: [companyId], references: [id])
+  activeCompany   Company?              @relation("ActiveCompany", fields: [activeCompanyId], references: [id])
+  companies       CompanyUserCompany[]  // Empresas que o usuário pode acessar
   serviceRequests ServiceRequest[]
+}
+
+// ─── Relação many-to-many: Usuário do portal ↔ Empresas ─────────────────────
+
+model CompanyUserCompany {
+  id            String   @id @default(uuid())
+  companyUserId String
+  companyId     String
+  isDefault     Boolean  @default(false)  // Empresa padrão do usuário
+  createdAt     DateTime @default(now())
+
+  companyUser CompanyUser @relation(fields: [companyUserId], references: [id], onDelete: Cascade)
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyUserId, companyId])
 }
 
 // ─── Drive Unificado ──────────────────────────────────────────────────────────

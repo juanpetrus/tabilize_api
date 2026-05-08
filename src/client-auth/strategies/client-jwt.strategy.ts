@@ -31,6 +31,14 @@ export class ClientJwtStrategy extends PassportStrategy(Strategy, 'client-jwt') 
       throw new UnauthorizedException('Usuário não encontrado ou inativo');
     }
 
-    return companyUser;
+    // Retorna o usuário com o companyId ativo do token JWT
+    // Isso garante que a empresa ativa seja a correta mesmo após switch
+    return {
+      ...companyUser,
+      id: companyUser.id,
+      name: companyUser.name,
+      email: companyUser.email,
+      companyId: payload.companyId, // Usa o companyId do token (empresa ativa)
+    };
   }
 }

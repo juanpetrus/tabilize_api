@@ -28,4 +28,22 @@ export class ClientAuthController {
     const { id, name, email, companyId } = req.user;
     return { companyUser: { id, name, email, companyId } };
   }
+
+  /**
+   * Lista todas as empresas que o cliente tem acesso
+   */
+  @UseGuards(ClientJwtGuard)
+  @Get('companies')
+  listCompanies(@Req() req: ClientAuthRequest) {
+    return this.clientAuthService.listCompanies(req.user.id);
+  }
+
+  /**
+   * Troca a empresa ativa do cliente
+   */
+  @UseGuards(ClientJwtGuard)
+  @Post('switch-company/:companyId')
+  switchCompany(@Req() req: ClientAuthRequest, @Param('companyId') companyId: string) {
+    return this.clientAuthService.switchCompany(req.user.id, companyId);
+  }
 }

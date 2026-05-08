@@ -3,6 +3,7 @@ import {
   ConflictException,
   UnauthorizedException,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -34,13 +35,28 @@ export class ClientAuthService {
 
     const hashedPassword = await bcrypt.hash(dto.password, this.saltRounds);
 
-    const companyUser = await this.prisma.companyUser.create({
-      data: {
-        companyId: company.id,
-        name: dto.name,
-        email: dto.email,
-        password: hashedPassword,
-      },
+    // Cria usuário e associação com empresa em uma transação
+    const companyUser = await this.prisma.$transaction(async (tx) => {
+      const user = await tx.companyUser.create({
+        data: {
+          companyId: company.id,
+          activeCompanyId: company.id,
+          name: dto.name,
+          email: dto.email,
+          password: hashedPassword,
+        },
+      });
+
+      // Cria associação many-to-many
+      await tx.companyUserCompany.create({
+        data: {
+          companyUserId: user.id,
+          companyId: company.id,
+          isDefault: true,
+        },
+      });
+
+      return user;
     });
 
     const token = this.generateToken(companyUser.id, companyUser.email, company.id);
@@ -50,7 +66,14 @@ export class ClientAuthService {
   async login(dto: ClientLoginDto) {
     const companyUser = await this.prisma.companyUser.findUnique({
       where: { email: dto.email },
-      include: { company: { select: { id: true, name: true, isActive: true } } },
+      include: {
+        company: { select: { id: true, name: true, isActive: true } },
+        companies: {
+          include: {
+            company: { select: { id: true, name: true, cnpj: true, isActive: true } },
+          },
+        },
+      },
     });
 
     if (!companyUser || !companyUser.isActive || !companyUser.company.isActive) {
@@ -61,14 +84,128 @@ export class ClientAuthService {
 
     if (!isPasswordValid) throw new UnauthorizedException('Credenciais inválidas');
 
-    const token = this.generateToken(companyUser.id, companyUser.email, companyUser.companyId);
-    return this.formatResponse(companyUser, token);
+    // Usa empresa ativa ou a padrão
+    const activeCompanyId = companyUser.activeCompanyId || companyUser.companyId;
+
+    const token = this.generateToken(companyUser.id, companyUser.email, activeCompanyId);
+    return this.formatResponseWithCompanies(companyUser, token, activeCompanyId);
   }
 
   async validateCompanyUser(companyUserId: string) {
     return this.prisma.companyUser.findUnique({
       where: { id: companyUserId, isActive: true },
       include: { company: { select: { id: true, name: true, teamId: true } } },
+    });
+  }
+
+  /**
+   * Lista todas as empresas que o usuário tem acesso
+   */
+  async listCompanies(companyUserId: string) {
+    const links = await this.prisma.companyUserCompany.findMany({
+      where: { companyUserId },
+      include: {
+        company: {
+          select: { id: true, name: true, cnpj: true, isActive: true },
+        },
+      },
+      orderBy: { isDefault: 'desc' },
+    });
+
+    const user = await this.prisma.companyUser.findUnique({
+      where: { id: companyUserId },
+      select: { activeCompanyId: true, companyId: true },
+    });
+
+    const activeCompanyId = user?.activeCompanyId || user?.companyId;
+
+    return links
+      .filter((link) => link.company.isActive)
+      .map((link) => ({
+        id: link.company.id,
+        name: link.company.name,
+        cnpj: link.company.cnpj,
+        isDefault: link.isDefault,
+        isActive: link.company.id === activeCompanyId,
+      }));
+  }
+
+  /**
+   * Troca a empresa ativa do usuário
+   */
+  async switchCompany(companyUserId: string, companyId: string) {
+    // Verifica se usuário tem acesso à empresa
+    const link = await this.prisma.companyUserCompany.findUnique({
+      where: {
+        companyUserId_companyId: { companyUserId, companyId },
+      },
+      include: {
+        company: { select: { id: true, name: true, isActive: true } },
+      },
+    });
+
+    if (!link || !link.company.isActive) {
+      throw new ForbiddenException('Você não tem acesso a esta empresa');
+    }
+
+    // Atualiza empresa ativa
+    const companyUser = await this.prisma.companyUser.update({
+      where: { id: companyUserId },
+      data: { activeCompanyId: companyId },
+      include: {
+        companies: {
+          include: {
+            company: { select: { id: true, name: true, cnpj: true, isActive: true } },
+          },
+        },
+      },
+    });
+
+    // Gera novo token com a empresa ativa
+    const token = this.generateToken(companyUser.id, companyUser.email, companyId);
+
+    return {
+      companyUser: {
+        id: companyUser.id,
+        name: companyUser.name,
+        email: companyUser.email,
+        companyId: companyId,
+      },
+      activeCompany: {
+        id: link.company.id,
+        name: link.company.name,
+      },
+      accessToken: token,
+    };
+  }
+
+  /**
+   * Adiciona acesso de um usuário a uma empresa adicional
+   */
+  async addCompanyAccess(companyUserId: string, companyId: string) {
+    const company = await this.prisma.company.findFirst({
+      where: { id: companyId, isActive: true },
+    });
+
+    if (!company) throw new NotFoundException('Empresa não encontrada');
+
+    const existing = await this.prisma.companyUserCompany.findUnique({
+      where: {
+        companyUserId_companyId: { companyUserId, companyId },
+      },
+    });
+
+    if (existing) throw new ConflictException('Usuário já tem acesso a esta empresa');
+
+    return this.prisma.companyUserCompany.create({
+      data: {
+        companyUserId,
+        companyId,
+        isDefault: false,
+      },
+      include: {
+        company: { select: { id: true, name: true, cnpj: true } },
+      },
     });
   }
 
@@ -90,6 +227,42 @@ export class ClientAuthService {
         email: companyUser.email,
         companyId: companyUser.companyId,
       },
+      accessToken: token,
+    };
+  }
+
+  private formatResponseWithCompanies(
+    companyUser: {
+      id: string;
+      name: string;
+      email: string;
+      companyId: string;
+      companies: Array<{
+        isDefault: boolean;
+        company: { id: string; name: string; cnpj: string | null; isActive: boolean };
+      }>;
+    },
+    token: string,
+    activeCompanyId: string,
+  ) {
+    const companies = companyUser.companies
+      .filter((c) => c.company.isActive)
+      .map((c) => ({
+        id: c.company.id,
+        name: c.company.name,
+        cnpj: c.company.cnpj,
+        isDefault: c.isDefault,
+        isActive: c.company.id === activeCompanyId,
+      }));
+
+    return {
+      companyUser: {
+        id: companyUser.id,
+        name: companyUser.name,
+        email: companyUser.email,
+        companyId: activeCompanyId,
+      },
+      companies,
       accessToken: token,
     };
   }

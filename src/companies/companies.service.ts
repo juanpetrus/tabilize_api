@@ -149,6 +149,148 @@ export class CompaniesService {
     return { imported: imported.length, skipped };
   }
 
+  // ─── Gerenciamento de acessos de usuários do portal ───────────────────────
+
+  /**
+   * Lista usuários do portal com acesso a uma empresa
+   */
+  async listCompanyUsers(teamId: string, companyId: string, userId: string) {
+    await this.ensureTeamMember(teamId, userId);
+    await this.ensureCompanyBelongsToTeam(teamId, companyId);
+
+    return this.prisma.companyUserCompany.findMany({
+      where: { companyId },
+      include: {
+        companyUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            companyId: true, // empresa padrão
+            isActive: true,
+            createdAt: true,
+          },
+        },
+      },
+    });
+  }
+
+  /**
+   * Adiciona acesso de um usuário do portal a uma empresa adicional
+   */
+  async addUserToCompany(
+    teamId: string,
+    companyId: string,
+    userId: string,
+    companyUserId: string,
+  ) {
+    await this.ensureTeamMember(teamId, userId);
+    await this.ensureCompanyBelongsToTeam(teamId, companyId);
+
+    // Verifica se o companyUser existe
+    const companyUser = await this.prisma.companyUser.findUnique({
+      where: { id: companyUserId },
+      include: { company: { select: { teamId: true } } },
+    });
+
+    if (!companyUser) {
+      throw new NotFoundException('Usuário do portal não encontrado');
+    }
+
+    // Verifica se o usuário pertence ao mesmo team
+    if (companyUser.company.teamId !== teamId) {
+      throw new ForbiddenException('Usuário não pertence a este escritório');
+    }
+
+    // Verifica se já tem acesso
+    const existing = await this.prisma.companyUserCompany.findUnique({
+      where: {
+        companyUserId_companyId: { companyUserId, companyId },
+      },
+    });
+
+    if (existing) {
+      throw new ConflictException('Usuário já tem acesso a esta empresa');
+    }
+
+    return this.prisma.companyUserCompany.create({
+      data: {
+        companyUserId,
+        companyId,
+        isDefault: false,
+      },
+      include: {
+        company: { select: { id: true, name: true, cnpj: true } },
+        companyUser: { select: { id: true, name: true, email: true } },
+      },
+    });
+  }
+
+  /**
+   * Remove acesso de um usuário do portal a uma empresa
+   */
+  async removeUserFromCompany(
+    teamId: string,
+    companyId: string,
+    userId: string,
+    companyUserId: string,
+  ) {
+    await this.ensureTeamMember(teamId, userId);
+    await this.ensureCompanyBelongsToTeam(teamId, companyId);
+
+    const link = await this.prisma.companyUserCompany.findUnique({
+      where: {
+        companyUserId_companyId: { companyUserId, companyId },
+      },
+    });
+
+    if (!link) {
+      throw new NotFoundException('Usuário não tem acesso a esta empresa');
+    }
+
+    // Não pode remover se for a empresa padrão
+    if (link.isDefault) {
+      throw new BadRequestException(
+        'Não é possível remover acesso à empresa padrão do usuário',
+      );
+    }
+
+    return this.prisma.companyUserCompany.delete({
+      where: {
+        companyUserId_companyId: { companyUserId, companyId },
+      },
+    });
+  }
+
+  /**
+   * Lista todos os usuários do portal do team (para adicionar a outras empresas)
+   */
+  async listAllPortalUsers(teamId: string, userId: string) {
+    await this.ensureTeamMember(teamId, userId);
+
+    return this.prisma.companyUser.findMany({
+      where: {
+        company: { teamId },
+        isActive: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        companyId: true,
+        company: { select: { id: true, name: true } },
+        companies: {
+          select: {
+            companyId: true,
+            isDefault: true,
+            company: { select: { id: true, name: true } },
+          },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   private async ensureTeamMember(teamId: string, userId: string) {
     const member = await this.prisma.teamMember.findUnique({
       where: { teamId_userId: { teamId, userId }, isActive: true },
@@ -157,5 +299,15 @@ export class CompaniesService {
     if (!member) throw new ForbiddenException('Você não é membro dessa equipe');
 
     return member;
+  }
+
+  private async ensureCompanyBelongsToTeam(teamId: string, companyId: string) {
+    const company = await this.prisma.company.findFirst({
+      where: { id: companyId, teamId, isActive: true },
+    });
+
+    if (!company) throw new NotFoundException('Empresa não encontrada');
+
+    return company;
   }
 }

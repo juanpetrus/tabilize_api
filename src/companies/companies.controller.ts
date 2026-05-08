@@ -28,6 +28,18 @@ export class CompaniesController {
     return this.companiesService.findAll(teamId, req.user.id);
   }
 
+  /**
+   * Lista todos os usuários do portal do escritório.
+   * Declarado antes de `:companyId` para não ser capturado pela rota dinâmica.
+   */
+  @Get('portal-users')
+  listAllPortalUsers(
+    @Param('teamId') teamId: string,
+    @Req() req: AuthRequest,
+  ) {
+    return this.companiesService.listAllPortalUsers(teamId, req.user.id);
+  }
+
   @Get(':companyId')
   findOne(
     @Param('teamId') teamId: string,
@@ -64,5 +76,55 @@ export class CompaniesController {
     @UploadedFile() file: Express.Multer.File,
   ) {
     return this.companiesService.importCsv(teamId, req.user.id, file.buffer);
+  }
+
+  // ─── Gerenciamento de acessos de usuários do portal ───────────────────────
+
+  /**
+   * Lista usuários do portal com acesso a uma empresa específica
+   */
+  @Get(':companyId/users')
+  listCompanyUsers(
+    @Param('teamId') teamId: string,
+    @Param('companyId') companyId: string,
+    @Req() req: AuthRequest,
+  ) {
+    return this.companiesService.listCompanyUsers(teamId, companyId, req.user.id);
+  }
+
+  /**
+   * Adiciona acesso de um usuário do portal a uma empresa
+   */
+  @Post(':companyId/users/:companyUserId')
+  addUserToCompany(
+    @Param('teamId') teamId: string,
+    @Param('companyId') companyId: string,
+    @Param('companyUserId') companyUserId: string,
+    @Req() req: AuthRequest,
+  ) {
+    return this.companiesService.addUserToCompany(
+      teamId,
+      companyId,
+      req.user.id,
+      companyUserId,
+    );
+  }
+
+  /**
+   * Remove acesso de um usuário do portal a uma empresa
+   */
+  @Delete(':companyId/users/:companyUserId')
+  removeUserFromCompany(
+    @Param('teamId') teamId: string,
+    @Param('companyId') companyId: string,
+    @Param('companyUserId') companyUserId: string,
+    @Req() req: AuthRequest,
+  ) {
+    return this.companiesService.removeUserFromCompany(
+      teamId,
+      companyId,
+      req.user.id,
+      companyUserId,
+    );
   }
 }
