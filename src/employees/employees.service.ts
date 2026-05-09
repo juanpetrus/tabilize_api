@@ -531,6 +531,95 @@ export class EmployeesService {
     });
   }
 
+  async findOneForClient(
+    companyId: string,
+    companyUserId: string,
+    employeeId: string,
+  ) {
+    // Verifica se o usuário tem acesso à empresa
+    const access = await this.prisma.companyUserCompany.findFirst({
+      where: {
+        companyUserId,
+        companyId,
+      },
+    });
+
+    if (!access) {
+      throw new ForbiddenException('Acesso negado a esta empresa');
+    }
+
+    const employee = await this.prisma.employee.findFirst({
+      where: { id: employeeId, companyId, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        position: true,
+        department: true,
+        admissionDate: true,
+        status: true,
+        contractType: true,
+        payslips: {
+          select: {
+            id: true,
+            competenceMonth: true,
+            competenceYear: true,
+            grossSalary: true,
+            netSalary: true,
+            deductions: true,
+            fileName: true,
+            createdAt: true,
+          },
+          orderBy: [{ competenceYear: 'desc' }, { competenceMonth: 'desc' }],
+        },
+      },
+    });
+
+    if (!employee) {
+      throw new NotFoundException('Funcionário não encontrado');
+    }
+
+    return employee;
+  }
+
+  async getPayslipForClient(
+    companyId: string,
+    companyUserId: string,
+    employeeId: string,
+    payslipId: string,
+  ) {
+    // Verifica se o usuário tem acesso à empresa
+    const access = await this.prisma.companyUserCompany.findFirst({
+      where: {
+        companyUserId,
+        companyId,
+      },
+    });
+
+    if (!access) {
+      throw new ForbiddenException('Acesso negado a esta empresa');
+    }
+
+    // Verifica se o funcionário pertence à empresa
+    const employee = await this.prisma.employee.findFirst({
+      where: { id: employeeId, companyId, isActive: true },
+    });
+
+    if (!employee) {
+      throw new NotFoundException('Funcionário não encontrado');
+    }
+
+    // Busca o holerite
+    const payslip = await this.prisma.payslip.findFirst({
+      where: { id: payslipId, employeeId },
+    });
+
+    if (!payslip) {
+      throw new NotFoundException('Holerite não encontrado');
+    }
+
+    return payslip;
+  }
+
   // ─── Helpers ─────────────────────────────────────────────────────────────────
 
   private async ensureTeamMember(teamId: string, userId: string) {

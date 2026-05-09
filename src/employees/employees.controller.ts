@@ -8,10 +8,12 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { EmployeesService } from './employees.service.js';
 import { CreateEmployeeDto } from './dto/create-employee.dto.js';
@@ -27,7 +29,7 @@ interface AuthRequest {
 }
 
 interface ClientAuthRequest {
-  user: { companyUserId: string; companyId: string };
+  user: { id: string; companyId: string };
 }
 
 // ─── Rotas do Staff (Contador) ───────────────────────────────────────────────
@@ -239,7 +241,40 @@ export class ClientEmployeesController {
   findAll(@Req() req: ClientAuthRequest) {
     return this.employeesService.findAllForClient(
       req.user.companyId,
-      req.user.companyUserId,
+      req.user.id,
     );
+  }
+
+  /**
+   * Detalhe do funcionário com holerites
+   */
+  @Get(':employeeId')
+  findOne(
+    @Param('employeeId') employeeId: string,
+    @Req() req: ClientAuthRequest,
+  ) {
+    return this.employeesService.findOneForClient(
+      req.user.companyId,
+      req.user.id,
+      employeeId,
+    );
+  }
+
+  /**
+   * Obter URL de download do holerite
+   */
+  @Get(':employeeId/payslips/:payslipId/download')
+  async getPayslipDownload(
+    @Param('employeeId') employeeId: string,
+    @Param('payslipId') payslipId: string,
+    @Req() req: ClientAuthRequest,
+  ) {
+    const payslip = await this.employeesService.getPayslipForClient(
+      req.user.companyId,
+      req.user.id,
+      employeeId,
+      payslipId,
+    );
+    return { url: payslip.fileUrl, fileName: payslip.fileName };
   }
 }
