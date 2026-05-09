@@ -17,6 +17,7 @@ import { PaymentsModule } from './payments/payments.module.js';
 import { BillingModule } from './billing/billing.module.js';
 import { SubscriptionGuard } from './billing/subscription.guard.js';
 import { SefazModule } from './sefaz/sefaz.module.js';
+import { CndModule } from './cnd/cnd.module.js';
 
 @Module({
   imports: [
@@ -34,11 +35,9 @@ import { SefazModule } from './sefaz/sefaz.module.js';
     PaymentsModule,
     BillingModule,
     SefazModule,
+    CndModule,
   ],
   controllers: [AppController],
-  providers: [
-    AppService,
-    { provide: APP_GUARD, useClass: SubscriptionGuard },
-  ],
+  providers: [AppService, { provide: APP_GUARD, useClass: SubscriptionGuard }],
 })
 export class AppModule {}

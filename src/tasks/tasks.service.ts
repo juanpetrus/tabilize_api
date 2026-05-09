@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../database/index.js';
 import { CreateTaskDto } from './dto/create-task.dto.js';
 import { UpdateTaskDto } from './dto/update-task.dto.js';
@@ -43,7 +48,12 @@ export class TasksService {
     }
 
     const maxOrder = await this.prisma.task.aggregate({
-      where: { boardId: dto.boardId, status: 'PENDING', parentId: null, isActive: true },
+      where: {
+        boardId: dto.boardId,
+        status: 'PENDING',
+        parentId: null,
+        isActive: true,
+      },
       _max: { order: true },
     });
 
@@ -65,7 +75,14 @@ export class TasksService {
     });
   }
 
-  async findAllByTeam(teamId: string, userId: string, boardId?: string, companyId?: string, assigneeId?: string, includeSubtasks?: boolean) {
+  async findAllByTeam(
+    teamId: string,
+    userId: string,
+    boardId?: string,
+    companyId?: string,
+    assigneeId?: string,
+    includeSubtasks?: boolean,
+  ) {
     await this.ensureTeamMember(teamId, userId);
 
     return this.prisma.task.findMany({
@@ -95,7 +112,12 @@ export class TasksService {
     return task;
   }
 
-  async update(teamId: string, taskId: string, userId: string, dto: UpdateTaskDto) {
+  async update(
+    teamId: string,
+    taskId: string,
+    userId: string,
+    dto: UpdateTaskDto,
+  ) {
     await this.ensureTeamMember(teamId, userId);
 
     const task = await this.prisma.task.findFirst({
@@ -107,12 +129,19 @@ export class TasksService {
     // Validate parentId if being updated
     if (dto.parentId !== undefined) {
       if (dto.parentId === taskId) {
-        throw new BadRequestException('Uma tarefa não pode ser sua própria subtarefa');
+        throw new BadRequestException(
+          'Uma tarefa não pode ser sua própria subtarefa',
+        );
       }
 
       if (dto.parentId !== null) {
         const parent = await this.prisma.task.findFirst({
-          where: { id: dto.parentId, teamId, boardId: task.boardId, isActive: true },
+          where: {
+            id: dto.parentId,
+            teamId,
+            boardId: task.boardId,
+            isActive: true,
+          },
         });
 
         if (!parent) throw new BadRequestException('Tarefa pai não encontrada');
@@ -152,18 +181,20 @@ export class TasksService {
   async reorder(teamId: string, userId: string, dto: ReorderTasksDto) {
     await this.ensureTeamMember(teamId, userId);
 
-    const ids = dto.items.map(i => i.id);
+    const ids = dto.items.map((i) => i.id);
     const found = await this.prisma.task.findMany({
       where: { id: { in: ids }, teamId, isActive: true },
       select: { id: true },
     });
 
     if (found.length !== ids.length) {
-      throw new BadRequestException('Uma ou mais tarefas não foram encontradas');
+      throw new BadRequestException(
+        'Uma ou mais tarefas não foram encontradas',
+      );
     }
 
     await this.prisma.$transaction(
-      dto.items.map(item =>
+      dto.items.map((item) =>
         this.prisma.task.update({
           where: { id: item.id },
           data: {
@@ -182,7 +213,8 @@ export class TasksService {
       where: { id: boardId, teamId, isActive: true },
     });
 
-    if (!board) throw new BadRequestException('Setor não encontrado neste escritório');
+    if (!board)
+      throw new BadRequestException('Setor não encontrado neste escritório');
   }
 
   private async ensureCompanyBelongsToTeam(teamId: string, companyId: string) {
@@ -190,7 +222,8 @@ export class TasksService {
       where: { id: companyId, teamId, isActive: true },
     });
 
-    if (!company) throw new BadRequestException('Empresa não encontrada neste escritório');
+    if (!company)
+      throw new BadRequestException('Empresa não encontrada neste escritório');
   }
 
   private async ensureTeamMember(teamId: string, userId: string) {
@@ -201,7 +234,11 @@ export class TasksService {
     if (!member) throw new ForbiddenException('Você não é membro dessa equipe');
   }
 
-  private async ensureParentTaskExists(teamId: string, parentId: string, boardId: string) {
+  private async ensureParentTaskExists(
+    teamId: string,
+    parentId: string,
+    boardId: string,
+  ) {
     const parent = await this.prisma.task.findFirst({
       where: { id: parentId, teamId, boardId, isActive: true },
     });
@@ -220,7 +257,12 @@ export class TasksService {
 
   // ─── Checklist Methods ─────────────────────────────────────────────────────
 
-  async createChecklistItem(teamId: string, taskId: string, userId: string, dto: CreateChecklistItemDto) {
+  async createChecklistItem(
+    teamId: string,
+    taskId: string,
+    userId: string,
+    dto: CreateChecklistItemDto,
+  ) {
     await this.ensureTeamMember(teamId, userId);
     await this.ensureTaskBelongsToTeam(teamId, taskId);
 
@@ -248,7 +290,13 @@ export class TasksService {
     });
   }
 
-  async updateChecklistItem(teamId: string, taskId: string, itemId: string, userId: string, dto: UpdateChecklistItemDto) {
+  async updateChecklistItem(
+    teamId: string,
+    taskId: string,
+    itemId: string,
+    userId: string,
+    dto: UpdateChecklistItemDto,
+  ) {
     await this.ensureTeamMember(teamId, userId);
     await this.ensureTaskBelongsToTeam(teamId, taskId);
 
@@ -264,7 +312,12 @@ export class TasksService {
     });
   }
 
-  async toggleChecklistItem(teamId: string, taskId: string, itemId: string, userId: string) {
+  async toggleChecklistItem(
+    teamId: string,
+    taskId: string,
+    itemId: string,
+    userId: string,
+  ) {
     await this.ensureTeamMember(teamId, userId);
     await this.ensureTaskBelongsToTeam(teamId, taskId);
 
@@ -280,7 +333,12 @@ export class TasksService {
     });
   }
 
-  async removeChecklistItem(teamId: string, taskId: string, itemId: string, userId: string) {
+  async removeChecklistItem(
+    teamId: string,
+    taskId: string,
+    itemId: string,
+    userId: string,
+  ) {
     await this.ensureTeamMember(teamId, userId);
     await this.ensureTaskBelongsToTeam(teamId, taskId);
 

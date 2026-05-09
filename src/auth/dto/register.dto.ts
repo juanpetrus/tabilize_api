@@ -1,4 +1,11 @@
-import { IsEmail, IsEnum, IsIn, IsNotEmpty, IsString, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsEnum,
+  IsIn,
+  IsNotEmpty,
+  IsString,
+  MinLength,
+} from 'class-validator';
 import { BillingCycle } from 'generated/prisma/enums';
 
 export class RegisterDto {
@@ -23,6 +30,8 @@ export class RegisterDto {
   planId: string;
 
   @IsString()
-  @IsEnum(BillingCycle, { message: 'O periodo deve ter um dos seguintes valores: MONTH, YEAR'})
+  @IsEnum(BillingCycle, {
+    message: 'O periodo deve ter um dos seguintes valores: MONTH, YEAR',
+  })
   billingCycle: string;
 }

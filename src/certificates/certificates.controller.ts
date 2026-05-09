@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, Param, Post, Req, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Req,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CertificatesService } from './certificates.service.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
@@ -22,7 +33,14 @@ export class CertificatesController {
     @Body('password') password: string,
     @Body('expiresAt') expiresAt?: string,
   ) {
-    return this.certificatesService.upsert(teamId, companyId, req.user.id, file, password, expiresAt);
+    return this.certificatesService.upsert(
+      teamId,
+      companyId,
+      req.user.id,
+      file,
+      password,
+      expiresAt,
+    );
   }
 
   @Get()

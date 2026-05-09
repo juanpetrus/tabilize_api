@@ -1,4 +1,8 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import axios from 'axios';
 import https from 'https';
 import { parseStringPromise } from 'xml2js';
@@ -12,7 +16,8 @@ import { CertificatesService } from '../certificates/certificates.service.js';
 const gunzipAsync = promisify(gunzip);
 
 const SEFAZ_URL = {
-  homolog: 'https://hom.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx',
+  homolog:
+    'https://hom.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx',
   prod: 'https://www1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx',
 };
 
@@ -37,25 +42,30 @@ export class SefazService {
     const member = await this.prisma.teamMember.findUnique({
       where: { teamId_userId: { teamId, userId }, isActive: true },
     });
-    if (!member) throw new BadRequestException('Você não é membro dessa equipe');
+    if (!member)
+      throw new BadRequestException('Você não é membro dessa equipe');
 
     const company = await this.prisma.company.findFirst({
       where: { id: companyId, teamId, isActive: true },
     });
     if (!company) throw new NotFoundException('Empresa não encontrada');
-    if (!company.cnpj) throw new BadRequestException('Empresa sem CNPJ cadastrado');
+    if (!company.cnpj)
+      throw new BadRequestException('Empresa sem CNPJ cadastrado');
 
     if (company.sefazLastSync) {
       const elapsed = Date.now() - company.sefazLastSync.getTime();
       if (elapsed < RATE_LIMIT_MS) {
         const minutosRestantes = Math.ceil((RATE_LIMIT_MS - elapsed) / 60000);
-        throw new BadRequestException(`Aguarde ${minutosRestantes} minuto(s) antes de consultar novamente`);
+        throw new BadRequestException(
+          `Aguarde ${minutosRestantes} minuto(s) antes de consultar novamente`,
+        );
       }
     }
 
     const cnpj = company.cnpj.replace(/\D/g, '');
     const ultNsu = company.sefazUltNsu ?? '000000000000000';
-    const { fileBuffer, password } = await this.certificates.getForIntegration(companyId);
+    const { fileBuffer, password } =
+      await this.certificates.getForIntegration(companyId);
 
     const tpAmb = ENV === 'prod' ? '1' : '2';
     const httpsAgent = this.buildHttpsAgent(fileBuffer, password);
@@ -66,17 +76,25 @@ export class SefazService {
       const response = await axios.post<string>(SEFAZ_URL[ENV], soapBody, {
         httpsAgent,
         headers: {
-          'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe/nfeDistDFeInteresse"',
+          'Content-Type':
+            'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe/nfeDistDFeInteresse"',
         },
         timeout: 30000,
       });
       responseXml = response.data;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Erro ao conectar na SEFAZ';
+      const msg =
+        err instanceof Error ? err.message : 'Erro ao conectar na SEFAZ';
       throw new BadRequestException(`Erro na comunicação com SEFAZ: ${msg}`);
     }
 
-    const { cStat, xMotivo, ultNsu: novoUltNsu, maxNsu, documentos } = await this.parseResponse(responseXml);
+    const {
+      cStat,
+      xMotivo,
+      ultNsu: novoUltNsu,
+      maxNsu,
+      documentos,
+    } = await this.parseResponse(responseXml);
 
     await this.prisma.company.update({
       where: { id: companyId },
@@ -142,9 +160,21 @@ export class SefazService {
       this.prisma.sefazNFe.findMany({
         where,
         select: {
-          id: true, nsu: true, chave: true, tipo: true, status: true, modelo: true,
-          emitenteCnpj: true, emitenteNome: true, destinCnpj: true, destinNome: true,
-          valor: true, serie: true, numero: true, dataEmissao: true, temXmlCompleto: true,
+          id: true,
+          nsu: true,
+          chave: true,
+          tipo: true,
+          status: true,
+          modelo: true,
+          emitenteCnpj: true,
+          emitenteNome: true,
+          destinCnpj: true,
+          destinNome: true,
+          valor: true,
+          serie: true,
+          numero: true,
+          dataEmissao: true,
+          temXmlCompleto: true,
           manifestacao: true,
           _count: { select: { eventos: true } },
         },
@@ -157,7 +187,12 @@ export class SefazService {
     return { total, page, limit, nfes };
   }
 
-  async getNFe(teamId: string, companyId: string, userId: string, nfeId: string) {
+  async getNFe(
+    teamId: string,
+    companyId: string,
+    userId: string,
+    nfeId: string,
+  ) {
     await this.ensureAccess(teamId, companyId, userId);
 
     const nfe = await this.prisma.sefazNFe.findFirst({
@@ -166,8 +201,13 @@ export class SefazService {
         eventos: {
           orderBy: { dataEvento: 'asc' },
           select: {
-            id: true, nsu: true, tpEvento: true, xEvento: true,
-            dataEvento: true, protocolo: true, schema: true,
+            id: true,
+            nsu: true,
+            tpEvento: true,
+            xEvento: true,
+            dataEvento: true,
+            protocolo: true,
+            schema: true,
           },
         },
       },
@@ -178,7 +218,9 @@ export class SefazService {
     if (nfe.temXmlCompleto && nfe.xmlGzip) {
       const compressed = Buffer.from(nfe.xmlGzip, 'base64');
       const xmlBuffer = await gunzipAsync(compressed);
-      const parsed = await parseStringPromise(xmlBuffer.toString('utf-8'), { explicitArray: false });
+      const parsed = await parseStringPromise(xmlBuffer.toString('utf-8'), {
+        explicitArray: false,
+      });
       const detalhes = this.parseNFeDetails(parsed);
       const { xmlGzip: _, ...nfeSemXml } = nfe;
       return { ...nfeSemXml, detalhes };
@@ -188,7 +230,12 @@ export class SefazService {
     return nfeSemXml;
   }
 
-  async getNFeXml(teamId: string, companyId: string, userId: string, nfeId: string) {
+  async getNFeXml(
+    teamId: string,
+    companyId: string,
+    userId: string,
+    nfeId: string,
+  ) {
     await this.ensureAccess(teamId, companyId, userId);
 
     const nfe = await this.prisma.sefazNFe.findFirst({
@@ -197,7 +244,9 @@ export class SefazService {
     });
     if (!nfe) throw new NotFoundException('NF-e não encontrada');
     if (!nfe.temXmlCompleto || !nfe.xmlGzip) {
-      throw new BadRequestException('XML completo não disponível para esta NF-e');
+      throw new BadRequestException(
+        'XML completo não disponível para esta NF-e',
+      );
     }
 
     const compressed = Buffer.from(nfe.xmlGzip, 'base64');
@@ -205,7 +254,12 @@ export class SefazService {
     return { xml: xml.toString('utf-8') };
   }
 
-  async getDanfe(teamId: string, companyId: string, userId: string, nfeId: string): Promise<Buffer> {
+  async getDanfe(
+    teamId: string,
+    companyId: string,
+    userId: string,
+    nfeId: string,
+  ): Promise<Buffer> {
     await this.ensureAccess(teamId, companyId, userId);
 
     const nfe = await this.prisma.sefazNFe.findFirst({
@@ -214,12 +268,16 @@ export class SefazService {
     });
     if (!nfe) throw new NotFoundException('NF-e não encontrada');
     if (!nfe.temXmlCompleto || !nfe.xmlGzip) {
-      throw new BadRequestException('XML completo não disponível — consulte a NF-e primeiro');
+      throw new BadRequestException(
+        'XML completo não disponível — consulte a NF-e primeiro',
+      );
     }
 
     const compressed = Buffer.from(nfe.xmlGzip, 'base64');
     const xmlBuffer = await gunzipAsync(compressed);
-    const parsed = await parseStringPromise(xmlBuffer.toString('utf-8'), { explicitArray: false });
+    const parsed = await parseStringPromise(xmlBuffer.toString('utf-8'), {
+      explicitArray: false,
+    });
     const detalhes = this.parseNFeDetails(parsed);
 
     const html = this.buildDanfeHtml(detalhes, nfe.chave ?? '');
@@ -235,20 +293,30 @@ export class SefazService {
     }
   }
 
-  private buildDanfeHtml(d: ReturnType<typeof this.parseNFeDetails>, chave: string): string {
+  private buildDanfeHtml(
+    d: ReturnType<typeof this.parseNFeDetails>,
+    chave: string,
+  ): string {
     const fmt = (v: number | null | undefined) =>
       v != null ? v.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '-';
 
     const fmtDoc = (doc: string | null | undefined) => {
       if (!doc) return '-';
-      if (doc.length === 14) return doc.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
-      if (doc.length === 11) return doc.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+      if (doc.length === 14)
+        return doc.replace(
+          /(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,
+          '$1.$2.$3/$4-$5',
+        );
+      if (doc.length === 11)
+        return doc.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
       return doc;
     };
 
     const chaveFormatada = chave.replace(/(\d{4})/g, '$1 ').trim();
 
-    const itensHtml = d.itens.map((it, i) => `
+    const itensHtml = d.itens
+      .map(
+        (it, i) => `
       <tr class="${i % 2 === 0 ? 'par' : 'impar'}">
         <td>${it.item ?? i + 1}</td>
         <td>${it.codigo ?? '-'}</td>
@@ -259,7 +327,9 @@ export class SefazService {
         <td class="num">${fmt(it.quantidade)}</td>
         <td class="num">${fmt(it.valorUnitario)}</td>
         <td class="num">${fmt(it.valorTotal)}</td>
-      </tr>`).join('');
+      </tr>`,
+      )
+      .join('');
 
     return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -365,19 +435,27 @@ export class SefazService {
     </table>
   </div>
 
-  ${d.informacoesAdicionais ? `
+  ${
+    d.informacoesAdicionais
+      ? `
   <div class="section">
     <div class="section-title">Informações Adicionais</div>
     <div>${d.informacoesAdicionais}</div>
-  </div>` : ''}
+  </div>`
+      : ''
+  }
 
   <!-- PROTOCOLO -->
-  ${d.protocolo ? `
+  ${
+    d.protocolo
+      ? `
   <div class="protocolo">
     Protocolo de Autorização: ${d.protocolo.numero ?? '-'} &nbsp;|&nbsp;
     Data: ${d.protocolo.dataAutorizacao ? new Date(String(d.protocolo.dataAutorizacao)).toLocaleString('pt-BR') : '-'} &nbsp;|&nbsp;
     Status: ${d.protocolo.status} - ${d.protocolo.motivo}
-  </div>` : ''}
+  </div>`
+      : ''
+  }
 
 </div>
 </body>
@@ -386,7 +464,11 @@ export class SefazService {
 
   // ─── Processamento interno ────────────────────────────────────────────────
 
-  private async saveDocuments(companyId: string, companyCnpj: string, documentos: DocZip[]) {
+  private async saveDocuments(
+    companyId: string,
+    companyCnpj: string,
+    documentos: DocZip[],
+  ) {
     let nfes = 0;
     let eventos = 0;
 
@@ -399,14 +481,38 @@ export class SefazService {
       try {
         const compressed = Buffer.from(xmlGzip, 'base64');
         const xmlBuffer = await gunzipAsync(compressed);
-        parsed = await parseStringPromise(xmlBuffer.toString('utf-8'), { explicitArray: false });
-      } catch { /* salva mesmo sem parse */ }
+        parsed = await parseStringPromise(xmlBuffer.toString('utf-8'), {
+          explicitArray: false,
+        });
+      } catch {
+        /* salva mesmo sem parse */
+      }
 
-      if (schema.startsWith('procNFe') || schema.startsWith('resNFe') || schema.startsWith('NFe')) {
-        const saved = await this.saveNFe(companyId, companyCnpj, nsu, schema, xmlGzip, parsed);
+      if (
+        schema.startsWith('procNFe') ||
+        schema.startsWith('resNFe') ||
+        schema.startsWith('NFe')
+      ) {
+        const saved = await this.saveNFe(
+          companyId,
+          companyCnpj,
+          nsu,
+          schema,
+          xmlGzip,
+          parsed,
+        );
         if (saved) nfes++;
-      } else if (schema.startsWith('resEvento') || schema.startsWith('procEventoNFe')) {
-        const saved = await this.saveEvento(companyId, nsu, schema, xmlGzip, parsed);
+      } else if (
+        schema.startsWith('resEvento') ||
+        schema.startsWith('procEventoNFe')
+      ) {
+        const saved = await this.saveEvento(
+          companyId,
+          nsu,
+          schema,
+          xmlGzip,
+          parsed,
+        );
         if (saved) eventos++;
       }
     }
@@ -422,7 +528,8 @@ export class SefazService {
     xmlGzip: string,
     parsed: Record<string, unknown>,
   ) {
-    const temXmlCompleto = schema.startsWith('procNFe') || schema.startsWith('NFe');
+    const temXmlCompleto =
+      schema.startsWith('procNFe') || schema.startsWith('NFe');
 
     const infNFe = this.extractInfNFe(parsed, schema);
     if (!infNFe) return false;
@@ -430,15 +537,23 @@ export class SefazService {
     const ide = infNFe?.['ide'] as Record<string, unknown>;
     const emit = infNFe?.['emit'] as Record<string, unknown>;
     const dest = infNFe?.['dest'] as Record<string, unknown>;
-    const total = (infNFe?.['total'] as Record<string, unknown>)?.['ICMSTot'] as Record<string, unknown>;
+    const total = (infNFe?.['total'] as Record<string, unknown>)?.[
+      'ICMSTot'
+    ] as Record<string, unknown>;
 
-    const idAttr = (infNFe?.['$'] as Record<string, unknown>)?.['Id'] as string ?? '';
-    const chave = idAttr.replace('NFe', '') || ((parsed?.['resNFe'] as Record<string, unknown>)?.['chNFe'] as string) || '';
+    const idAttr =
+      ((infNFe?.['$'] as Record<string, unknown>)?.['Id'] as string) ?? '';
+    const chave =
+      idAttr.replace('NFe', '') ||
+      ((parsed?.['resNFe'] as Record<string, unknown>)?.['chNFe'] as string) ||
+      '';
     if (!chave) return false;
 
-    const emitenteCnpj = (emit?.['CNPJ'] as string) ?? (emit?.['CPF'] as string) ?? null;
+    const emitenteCnpj =
+      (emit?.['CNPJ'] as string) ?? (emit?.['CPF'] as string) ?? null;
     const emitenteNome = (emit?.['xNome'] as string) ?? null;
-    const destinCnpj = (dest?.['CNPJ'] as string) ?? (dest?.['CPF'] as string) ?? null;
+    const destinCnpj =
+      (dest?.['CNPJ'] as string) ?? (dest?.['CPF'] as string) ?? null;
     const destinNome = (dest?.['xNome'] as string) ?? null;
     const valor = total?.['vNF'] ? parseFloat(total['vNF'] as string) : null;
     const dhEmi = (ide?.['dhEmi'] as string) ?? (ide?.['dEmi'] as string);
@@ -446,18 +561,35 @@ export class SefazService {
     const serie = (ide?.['serie'] as string) ?? null;
     const numero = (ide?.['nNF'] as string) ?? null;
     const modelo = (ide?.['mod'] as string) ?? null;
-    const tipo = emitenteCnpj === companyCnpj ? 'EMITIDA' : destinCnpj === companyCnpj ? 'RECEBIDA' : null;
+    const tipo =
+      emitenteCnpj === companyCnpj
+        ? 'EMITIDA'
+        : destinCnpj === companyCnpj
+          ? 'RECEBIDA'
+          : null;
 
     await this.prisma.sefazNFe.upsert({
       where: { companyId_chave: { companyId, chave } },
       create: {
-        companyId, chave, nsu, tipo, modelo, emitenteCnpj, emitenteNome,
-        destinCnpj, destinNome, valor, serie, numero, dataEmissao,
+        companyId,
+        chave,
+        nsu,
+        tipo,
+        modelo,
+        emitenteCnpj,
+        emitenteNome,
+        destinCnpj,
+        destinNome,
+        valor,
+        serie,
+        numero,
+        dataEmissao,
         xmlGzip: temXmlCompleto ? xmlGzip : null,
         temXmlCompleto,
       },
       update: {
-        nsu, modelo,
+        nsu,
+        modelo,
         ...(emitenteCnpj && { emitenteCnpj }),
         ...(emitenteNome && { emitenteNome }),
         ...(destinCnpj && { destinCnpj }),
@@ -488,13 +620,17 @@ export class SefazService {
 
     const resEvento =
       (parsed?.['resEvento'] as Record<string, unknown>) ??
-      ((parsed?.['procEventoNFe'] as Record<string, unknown>)?.['eventoNFe'] as Record<string, unknown>);
+      ((parsed?.['procEventoNFe'] as Record<string, unknown>)?.[
+        'eventoNFe'
+      ] as Record<string, unknown>);
 
     const chaveNFe = (resEvento?.['chNFe'] as string) ?? '';
     const tpEvento = (resEvento?.['tpEvento'] as string) ?? null;
     const xEvento = (resEvento?.['xEvento'] as string) ?? null;
     const protocolo = (resEvento?.['nProt'] as string) ?? null;
-    const dhEvento = (resEvento?.['dhEvento'] as string) ?? (resEvento?.['dhRecbto'] as string);
+    const dhEvento =
+      (resEvento?.['dhEvento'] as string) ??
+      (resEvento?.['dhRecbto'] as string);
     const dataEvento = dhEvento ? new Date(dhEvento) : null;
 
     // Busca NF-e vinculada pela chave (se existir)
@@ -529,7 +665,9 @@ export class SefazService {
       if (!nfe && chaveNFe) {
         const created = await this.prisma.sefazNFe.create({
           data: {
-            companyId, chave: chaveNFe, nsu: null,
+            companyId,
+            chave: chaveNFe,
+            nsu: null,
             status: tpEvento === '110111' ? 'CANCELADA' : 'AUTORIZADA',
             temXmlCompleto: false,
           },
@@ -539,7 +677,18 @@ export class SefazService {
     }
 
     await this.prisma.sefazEvento.create({
-      data: { companyId, nfeId, chaveNFe, nsu, tpEvento, xEvento, dataEvento, protocolo, schema, xmlGzip },
+      data: {
+        companyId,
+        nfeId,
+        chaveNFe,
+        nsu,
+        tpEvento,
+        xEvento,
+        dataEvento,
+        protocolo,
+        schema,
+        xmlGzip,
+      },
     });
 
     return true;
@@ -549,10 +698,16 @@ export class SefazService {
 
   private extractInfNFe(parsed: Record<string, unknown>, schema: string) {
     if (schema.startsWith('procNFe') || schema.startsWith('NFe')) {
-      return (
-        ((parsed?.['nfeProc'] as Record<string, unknown>)?.['NFe'] as Record<string, unknown>)?.['infNFe'] ??
-        ((parsed?.['NFe'] as Record<string, unknown>)?.['infNFe'])
-      ) as Record<string, unknown>;
+      return ((
+        (parsed?.['nfeProc'] as Record<string, unknown>)?.['NFe'] as Record<
+          string,
+          unknown
+        >
+      )?.['infNFe'] ??
+        (parsed?.['NFe'] as Record<string, unknown>)?.['infNFe']) as Record<
+        string,
+        unknown
+      >;
     }
     if (schema.startsWith('resNFe')) {
       return parsed?.['resNFe'] as Record<string, unknown>;
@@ -561,18 +716,28 @@ export class SefazService {
   }
 
   private parseNFeDetails(parsed: Record<string, unknown>) {
-    const infNFe = (
-      ((parsed?.['nfeProc'] as Record<string, unknown>)?.['NFe'] as Record<string, unknown>)?.['infNFe'] ??
-      ((parsed?.['NFe'] as Record<string, unknown>)?.['infNFe'])
-    ) as Record<string, unknown>;
+    const infNFe = ((
+      (parsed?.['nfeProc'] as Record<string, unknown>)?.['NFe'] as Record<
+        string,
+        unknown
+      >
+    )?.['infNFe'] ??
+      (parsed?.['NFe'] as Record<string, unknown>)?.['infNFe']) as Record<
+      string,
+      unknown
+    >;
 
     const ide = infNFe?.['ide'] as Record<string, unknown>;
     const emit = infNFe?.['emit'] as Record<string, unknown>;
     const dest = infNFe?.['dest'] as Record<string, unknown>;
-    const total = (infNFe?.['total'] as Record<string, unknown>)?.['ICMSTot'] as Record<string, unknown>;
+    const total = (infNFe?.['total'] as Record<string, unknown>)?.[
+      'ICMSTot'
+    ] as Record<string, unknown>;
     const transp = infNFe?.['transp'] as Record<string, unknown>;
     const infAdic = infNFe?.['infAdic'] as Record<string, unknown>;
-    const protNFe = (parsed?.['nfeProc'] as Record<string, unknown>)?.['protNFe'] as Record<string, unknown>;
+    const protNFe = (parsed?.['nfeProc'] as Record<string, unknown>)?.[
+      'protNFe'
+    ] as Record<string, unknown>;
     const infProt = protNFe?.['infProt'] as Record<string, unknown>;
 
     const detRaw = infNFe?.['det'];
@@ -587,8 +752,12 @@ export class SefazService {
         cfop: prod?.['CFOP'],
         unidade: prod?.['uCom'],
         quantidade: prod?.['qCom'] ? parseFloat(prod['qCom'] as string) : null,
-        valorUnitario: prod?.['vUnCom'] ? parseFloat(prod['vUnCom'] as string) : null,
-        valorTotal: prod?.['vProd'] ? parseFloat(prod['vProd'] as string) : null,
+        valorUnitario: prod?.['vUnCom']
+          ? parseFloat(prod['vUnCom'] as string)
+          : null,
+        valorTotal: prod?.['vProd']
+          ? parseFloat(prod['vProd'] as string)
+          : null,
       };
     });
 
@@ -597,33 +766,43 @@ export class SefazService {
       serie: ide?.['serie'],
       naturezaOperacao: ide?.['natOp'],
       emitente: {
-        documento: (emit?.['CNPJ'] as string) ?? (emit?.['CPF'] as string) ?? null,
+        documento:
+          (emit?.['CNPJ'] as string) ?? (emit?.['CPF'] as string) ?? null,
         nome: emit?.['xNome'],
         fantasia: emit?.['xFant'],
         ie: emit?.['IE'],
       },
       destinatario: {
-        documento: (dest?.['CNPJ'] as string) ?? (dest?.['CPF'] as string) ?? null,
+        documento:
+          (dest?.['CNPJ'] as string) ?? (dest?.['CPF'] as string) ?? null,
         nome: dest?.['xNome'],
         ie: dest?.['IE'],
       },
       totais: {
-        produtos: total?.['vProd'] ? parseFloat(total['vProd'] as string) : null,
+        produtos: total?.['vProd']
+          ? parseFloat(total['vProd'] as string)
+          : null,
         frete: total?.['vFrete'] ? parseFloat(total['vFrete'] as string) : null,
-        desconto: total?.['vDesc'] ? parseFloat(total['vDesc'] as string) : null,
+        desconto: total?.['vDesc']
+          ? parseFloat(total['vDesc'] as string)
+          : null,
         icms: total?.['vICMS'] ? parseFloat(total['vICMS'] as string) : null,
         ipi: total?.['vIPI'] ? parseFloat(total['vIPI'] as string) : null,
         pis: total?.['vPIS'] ? parseFloat(total['vPIS'] as string) : null,
-        cofins: total?.['vCOFINS'] ? parseFloat(total['vCOFINS'] as string) : null,
+        cofins: total?.['vCOFINS']
+          ? parseFloat(total['vCOFINS'] as string)
+          : null,
         valorNota: total?.['vNF'] ? parseFloat(total['vNF'] as string) : null,
       },
       transporte: { modalidade: transp?.['modFrete'] },
-      protocolo: infProt ? {
-        numero: infProt?.['nProt'],
-        dataAutorizacao: infProt?.['dhRecbto'],
-        status: infProt?.['cStat'],
-        motivo: infProt?.['xMotivo'],
-      } : null,
+      protocolo: infProt
+        ? {
+            numero: infProt?.['nProt'],
+            dataAutorizacao: infProt?.['dhRecbto'],
+            status: infProt?.['cStat'],
+            motivo: infProt?.['xMotivo'],
+          }
+        : null,
       informacoesAdicionais: (infAdic?.['infCpl'] as string) ?? null,
       itens,
     };
@@ -631,7 +810,13 @@ export class SefazService {
 
   // ─── Consulta NF-e por chave (consChNFe) ─────────────────────────────────
 
-  async consultarNFe(teamId: string, companyId: string, userId: string, nfeId: string, force = false) {
+  async consultarNFe(
+    teamId: string,
+    companyId: string,
+    userId: string,
+    nfeId: string,
+    force = false,
+  ) {
     await this.ensureAccess(teamId, companyId, userId);
 
     const nfe = await this.prisma.sefazNFe.findFirst({
@@ -639,12 +824,21 @@ export class SefazService {
     });
     if (!nfe) throw new NotFoundException('NF-e não encontrada');
     if (!nfe.chave) throw new BadRequestException('NF-e sem chave de acesso');
-    if (nfe.temXmlCompleto && !force) return { atualizado: false, motivo: 'XML completo já disponível' };
-    if (nfe.tipo === 'EMITIDA') return { atualizado: false, motivo: 'NF-e emitida — consulta por chave não permitida pela SEFAZ para o emitente' };
+    if (nfe.temXmlCompleto && !force)
+      return { atualizado: false, motivo: 'XML completo já disponível' };
+    if (nfe.tipo === 'EMITIDA')
+      return {
+        atualizado: false,
+        motivo:
+          'NF-e emitida — consulta por chave não permitida pela SEFAZ para o emitente',
+      };
 
-    const company = await this.prisma.company.findFirst({ where: { id: companyId } });
+    const company = await this.prisma.company.findFirst({
+      where: { id: companyId },
+    });
     const cnpj = company!.cnpj!.replace(/\D/g, '');
-    const { fileBuffer, password } = await this.certificates.getForIntegration(companyId);
+    const { fileBuffer, password } =
+      await this.certificates.getForIntegration(companyId);
     const httpsAgent = this.buildHttpsAgent(fileBuffer, password);
     const tpAmb = ENV === 'prod' ? '1' : '2';
 
@@ -655,22 +849,29 @@ export class SefazService {
       const response = await axios.post<string>(SEFAZ_URL[ENV], soapBody, {
         httpsAgent,
         headers: {
-          'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe/nfeDistDFeInteresse"',
+          'Content-Type':
+            'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe/nfeDistDFeInteresse"',
         },
         timeout: 30000,
       });
       console.log(response.data);
       responseXml = response.data;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Erro ao conectar na SEFAZ';
+      const msg =
+        err instanceof Error ? err.message : 'Erro ao conectar na SEFAZ';
       throw new BadRequestException(`Erro na comunicação com SEFAZ: ${msg}`);
     }
 
-    const parsed = await parseStringPromise(responseXml, { explicitArray: false });
-    const body = parsed?.['soap:Envelope']?.['soap:Body'] ?? parsed?.['s:Envelope']?.['s:Body'];
+    const parsed = await parseStringPromise(responseXml, {
+      explicitArray: false,
+    });
+    const body =
+      parsed?.['soap:Envelope']?.['soap:Body'] ??
+      parsed?.['s:Envelope']?.['s:Body'];
     const retDistDFeInt =
-      body?.['nfeDistDFeInteresseResponse']?.['nfeDistDFeInteresseResult']?.['retDistDFeInt'] ??
-      body?.['retDistDFeInt'];
+      body?.['nfeDistDFeInteresseResponse']?.['nfeDistDFeInteresseResult']?.[
+        'retDistDFeInt'
+      ] ?? body?.['retDistDFeInt'];
 
     const cStat = retDistDFeInt?.['cStat'] as string;
     const xMotivo = retDistDFeInt?.['xMotivo'] as string;
@@ -681,7 +882,11 @@ export class SefazService {
     }
 
     const docs = retDistDFeInt?.['loteDistDFeInt']?.['docZip'];
-    const documentos: DocZip[] = Array.isArray(docs) ? docs : docs ? [docs] : [];
+    const documentos: DocZip[] = Array.isArray(docs)
+      ? docs
+      : docs
+        ? [docs]
+        : [];
 
     for (const doc of documentos) {
       const schema = doc.$?.schema ?? '';
@@ -694,17 +899,25 @@ export class SefazService {
       try {
         const compressed = Buffer.from(xmlGzip, 'base64');
         const xmlBuffer = await gunzipAsync(compressed);
-        docParsed = await parseStringPromise(xmlBuffer.toString('utf-8'), { explicitArray: false });
-      } catch { /* mantém campos existentes */ }
+        docParsed = await parseStringPromise(xmlBuffer.toString('utf-8'), {
+          explicitArray: false,
+        });
+      } catch {
+        /* mantém campos existentes */
+      }
 
       const infNFe = this.extractInfNFe(docParsed, schema);
       const emit = infNFe?.['emit'] as Record<string, unknown>;
       const dest = infNFe?.['dest'] as Record<string, unknown>;
-      const total = (infNFe?.['total'] as Record<string, unknown>)?.['ICMSTot'] as Record<string, unknown>;
+      const total = (infNFe?.['total'] as Record<string, unknown>)?.[
+        'ICMSTot'
+      ] as Record<string, unknown>;
       const ide = infNFe?.['ide'] as Record<string, unknown>;
 
-      const emitenteCnpj = (emit?.['CNPJ'] as string) ?? (emit?.['CPF'] as string) ?? null;
-      const destinCnpj = (dest?.['CNPJ'] as string) ?? (dest?.['CPF'] as string) ?? null;
+      const emitenteCnpj =
+        (emit?.['CNPJ'] as string) ?? (emit?.['CPF'] as string) ?? null;
+      const destinCnpj =
+        (dest?.['CNPJ'] as string) ?? (dest?.['CPF'] as string) ?? null;
 
       const dhEmi = (ide?.['dhEmi'] as string) ?? (ide?.['dEmi'] as string);
 
@@ -717,34 +930,56 @@ export class SefazService {
           emitenteNome: (emit?.['xNome'] as string) ?? nfe.emitenteNome,
           destinCnpj: destinCnpj ?? nfe.destinCnpj,
           destinNome: (dest?.['xNome'] as string) ?? nfe.destinNome,
-          valor: total?.['vNF'] ? parseFloat(total['vNF'] as string) : nfe.valor,
+          valor: total?.['vNF']
+            ? parseFloat(total['vNF'] as string)
+            : nfe.valor,
           serie: (ide?.['serie'] as string) ?? nfe.serie,
           numero: (ide?.['nNF'] as string) ?? nfe.numero,
           modelo: (ide?.['mod'] as string) ?? nfe.modelo,
           dataEmissao: dhEmi ? new Date(dhEmi) : nfe.dataEmissao,
-          tipo: emitenteCnpj === cnpj ? 'EMITIDA' : destinCnpj === cnpj ? 'RECEBIDA' : nfe.tipo,
+          tipo:
+            emitenteCnpj === cnpj
+              ? 'EMITIDA'
+              : destinCnpj === cnpj
+                ? 'RECEBIDA'
+                : nfe.tipo,
         },
       });
 
       return { atualizado: true, motivo: 'XML completo obtido e salvo' };
     }
 
-    return { atualizado: false, motivo: 'Documento não encontrado na resposta' };
+    return {
+      atualizado: false,
+      motivo: 'Documento não encontrado na resposta',
+    };
   }
 
   // ─── Busca NF-e na SEFAZ pela chave, cria ou atualiza no banco ──────────────
 
-  async buscarNFePorChave(teamId: string, companyId: string, userId: string, chave: string) {
+  async buscarNFePorChave(
+    teamId: string,
+    companyId: string,
+    userId: string,
+    chave: string,
+  ) {
     await this.ensureAccess(teamId, companyId, userId);
 
     const chaveLimpa = chave.replace(/\D/g, '');
-    if (chaveLimpa.length !== 44) throw new BadRequestException('Chave de acesso inválida — deve ter 44 dígitos');
+    if (chaveLimpa.length !== 44)
+      throw new BadRequestException(
+        'Chave de acesso inválida — deve ter 44 dígitos',
+      );
 
-    const company = await this.prisma.company.findFirst({ where: { id: companyId } });
-    if (!company?.cnpj) throw new BadRequestException('Empresa sem CNPJ cadastrado');
+    const company = await this.prisma.company.findFirst({
+      where: { id: companyId },
+    });
+    if (!company?.cnpj)
+      throw new BadRequestException('Empresa sem CNPJ cadastrado');
     const cnpj = company.cnpj.replace(/\D/g, '');
 
-    const { fileBuffer, password } = await this.certificates.getForIntegration(companyId);
+    const { fileBuffer, password } =
+      await this.certificates.getForIntegration(companyId);
     const httpsAgent = this.buildHttpsAgent(fileBuffer, password);
     const tpAmb = ENV === 'prod' ? '1' : '2';
 
@@ -755,56 +990,83 @@ export class SefazService {
       const response = await axios.post<string>(SEFAZ_URL[ENV], soapBody, {
         httpsAgent,
         headers: {
-          'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe/nfeDistDFeInteresse"',
+          'Content-Type':
+            'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe/nfeDistDFeInteresse"',
         },
         timeout: 30000,
       });
       responseXml = response.data;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Erro ao conectar na SEFAZ';
+      const msg =
+        err instanceof Error ? err.message : 'Erro ao conectar na SEFAZ';
       throw new BadRequestException(`Erro na comunicação com SEFAZ: ${msg}`);
     }
 
-    const parsed = await parseStringPromise(responseXml, { explicitArray: false });
-    const body = parsed?.['soap:Envelope']?.['soap:Body'] ?? parsed?.['s:Envelope']?.['s:Body'];
+    const parsed = await parseStringPromise(responseXml, {
+      explicitArray: false,
+    });
+    const body =
+      parsed?.['soap:Envelope']?.['soap:Body'] ??
+      parsed?.['s:Envelope']?.['s:Body'];
     const retDistDFeInt =
-      body?.['nfeDistDFeInteresseResponse']?.['nfeDistDFeInteresseResult']?.['retDistDFeInt'] ??
-      body?.['retDistDFeInt'];
+      body?.['nfeDistDFeInteresseResponse']?.['nfeDistDFeInteresseResult']?.[
+        'retDistDFeInt'
+      ] ?? body?.['retDistDFeInt'];
 
     const cStat = retDistDFeInt?.['cStat'] as string;
     const xMotivo = retDistDFeInt?.['xMotivo'] as string;
 
     if (cStat !== '138') {
-      throw new NotFoundException(`Nota não encontrada na SEFAZ: ${cStat} - ${xMotivo}`);
+      throw new NotFoundException(
+        `Nota não encontrada na SEFAZ: ${cStat} - ${xMotivo}`,
+      );
     }
 
     const docs = retDistDFeInt?.['loteDistDFeInt']?.['docZip'];
-    const documentos: DocZip[] = Array.isArray(docs) ? docs : docs ? [docs] : [];
+    const documentos: DocZip[] = Array.isArray(docs)
+      ? docs
+      : docs
+        ? [docs]
+        : [];
 
     for (const doc of documentos) {
       const schema = doc.$?.schema ?? '';
       const xmlGzip = doc._;
 
-      if (!schema.startsWith('procNFe') && !schema.startsWith('resNFe') && !schema.startsWith('NFe')) continue;
+      if (
+        !schema.startsWith('procNFe') &&
+        !schema.startsWith('resNFe') &&
+        !schema.startsWith('NFe')
+      )
+        continue;
 
-      const temXmlCompleto = schema.startsWith('procNFe') || schema.startsWith('NFe');
+      const temXmlCompleto =
+        schema.startsWith('procNFe') || schema.startsWith('NFe');
 
       let docParsed: Record<string, unknown> = {};
       try {
         const compressed = Buffer.from(xmlGzip, 'base64');
         const xmlBuffer = await gunzipAsync(compressed);
-        docParsed = await parseStringPromise(xmlBuffer.toString('utf-8'), { explicitArray: false });
-      } catch { /* mantém o que veio */ }
+        docParsed = await parseStringPromise(xmlBuffer.toString('utf-8'), {
+          explicitArray: false,
+        });
+      } catch {
+        /* mantém o que veio */
+      }
 
       const infNFe = this.extractInfNFe(docParsed, schema);
       const ide = infNFe?.['ide'] as Record<string, unknown>;
       const emit = infNFe?.['emit'] as Record<string, unknown>;
       const dest = infNFe?.['dest'] as Record<string, unknown>;
-      const total = (infNFe?.['total'] as Record<string, unknown>)?.['ICMSTot'] as Record<string, unknown>;
+      const total = (infNFe?.['total'] as Record<string, unknown>)?.[
+        'ICMSTot'
+      ] as Record<string, unknown>;
 
-      const emitenteCnpj = (emit?.['CNPJ'] as string) ?? (emit?.['CPF'] as string) ?? null;
+      const emitenteCnpj =
+        (emit?.['CNPJ'] as string) ?? (emit?.['CPF'] as string) ?? null;
       const emitenteNome = (emit?.['xNome'] as string) ?? null;
-      const destinCnpj = (dest?.['CNPJ'] as string) ?? (dest?.['CPF'] as string) ?? null;
+      const destinCnpj =
+        (dest?.['CNPJ'] as string) ?? (dest?.['CPF'] as string) ?? null;
       const destinNome = (dest?.['xNome'] as string) ?? null;
       const valor = total?.['vNF'] ? parseFloat(total['vNF'] as string) : null;
       const dhEmi = (ide?.['dhEmi'] as string) ?? (ide?.['dEmi'] as string);
@@ -812,14 +1074,29 @@ export class SefazService {
       const serie = (ide?.['serie'] as string) ?? null;
       const numero = (ide?.['nNF'] as string) ?? null;
       const modelo = (ide?.['mod'] as string) ?? null;
-      const tipo = emitenteCnpj === cnpj ? 'EMITIDA' : destinCnpj === cnpj ? 'RECEBIDA' : null;
+      const tipo =
+        emitenteCnpj === cnpj
+          ? 'EMITIDA'
+          : destinCnpj === cnpj
+            ? 'RECEBIDA'
+            : null;
 
       const nfe = await this.prisma.sefazNFe.upsert({
         where: { companyId_chave: { companyId, chave: chaveLimpa } },
         create: {
-          companyId, chave: chaveLimpa, nsu: null, tipo, modelo,
-          emitenteCnpj, emitenteNome, destinCnpj, destinNome,
-          valor, serie, numero, dataEmissao,
+          companyId,
+          chave: chaveLimpa,
+          nsu: null,
+          tipo,
+          modelo,
+          emitenteCnpj,
+          emitenteNome,
+          destinCnpj,
+          destinNome,
+          valor,
+          serie,
+          numero,
+          dataEmissao,
           xmlGzip: temXmlCompleto ? xmlGzip : null,
           temXmlCompleto,
         },
@@ -841,10 +1118,16 @@ export class SefazService {
       return this.getNFe(teamId, companyId, userId, nfe.id);
     }
 
-    throw new NotFoundException('Documento não encontrado na resposta da SEFAZ');
+    throw new NotFoundException(
+      'Documento não encontrado na resposta da SEFAZ',
+    );
   }
 
-  private buildConsChNFeSoap(cnpj: string, chNFe: string, tpAmb: string): string {
+  private buildConsChNFeSoap(
+    cnpj: string,
+    chNFe: string,
+    tpAmb: string,
+  ): string {
     return `<?xml version="1.0" encoding="utf-8"?>
 <soap12:Envelope
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -871,11 +1154,14 @@ export class SefazService {
   private buildHttpsAgent(fileBuffer: Buffer, password: string) {
     const p12Asn1 = forge.asn1.fromDer(fileBuffer.toString('binary'));
     const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, password);
-    const keyBags = p12.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag });
+    const keyBags = p12.getBags({
+      bagType: forge.pki.oids.pkcs8ShroudedKeyBag,
+    });
     const certBags = p12.getBags({ bagType: forge.pki.oids.certBag });
     const privateKey = keyBags[forge.pki.oids.pkcs8ShroudedKeyBag]?.[0]?.key;
     const certificate = certBags[forge.pki.oids.certBag]?.[0]?.cert;
-    if (!privateKey || !certificate) throw new BadRequestException('Certificado inválido ou corrompido');
+    if (!privateKey || !certificate)
+      throw new BadRequestException('Certificado inválido ou corrompido');
     return new https.Agent({
       key: forge.pki.privateKeyToPem(privateKey),
       cert: forge.pki.certificateToPem(certificate),
@@ -885,23 +1171,35 @@ export class SefazService {
 
   private async parseResponse(xml: string) {
     const parsed = await parseStringPromise(xml, { explicitArray: false });
-    const body = parsed?.['soap:Envelope']?.['soap:Body'] ?? parsed?.['s:Envelope']?.['s:Body'];
+    const body =
+      parsed?.['soap:Envelope']?.['soap:Body'] ??
+      parsed?.['s:Envelope']?.['s:Body'];
     const retDistDFeInt =
-      body?.['nfeDistDFeInteresseResponse']?.['nfeDistDFeInteresseResult']?.['retDistDFeInt'] ??
-      body?.['retDistDFeInt'];
-    if (!retDistDFeInt) throw new BadRequestException('Resposta inválida da SEFAZ');
+      body?.['nfeDistDFeInteresseResponse']?.['nfeDistDFeInteresseResult']?.[
+        'retDistDFeInt'
+      ] ?? body?.['retDistDFeInt'];
+    if (!retDistDFeInt)
+      throw new BadRequestException('Resposta inválida da SEFAZ');
 
     const cStat = retDistDFeInt?.['cStat'] as string;
     const xMotivo = retDistDFeInt?.['xMotivo'] as string;
     const ultNsu = (retDistDFeInt?.['ultNSU'] as string) ?? '000000000000000';
     const maxNsu = (retDistDFeInt?.['maxNSU'] as string) ?? '000000000000000';
     const docs = retDistDFeInt?.['loteDistDFeInt']?.['docZip'];
-    const documentos: DocZip[] = Array.isArray(docs) ? docs : docs ? [docs] : [];
+    const documentos: DocZip[] = Array.isArray(docs)
+      ? docs
+      : docs
+        ? [docs]
+        : [];
 
     return { cStat, xMotivo, ultNsu, maxNsu, documentos };
   }
 
-  private buildSoapRequest(cnpj: string, ultNsu: string, tpAmb: string): string {
+  private buildSoapRequest(
+    cnpj: string,
+    ultNsu: string,
+    tpAmb: string,
+  ): string {
     return `<?xml version="1.0" encoding="utf-8"?>
 <soap12:Envelope
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -939,38 +1237,64 @@ export class SefazService {
       where: { id: nfeId, companyId },
     });
     if (!nfe) throw new NotFoundException('NF-e não encontrada');
-    if (nfe.tipo !== 'RECEBIDA') throw new BadRequestException('Manifestação só é permitida em NF-es recebidas');
+    if (nfe.tipo !== 'RECEBIDA')
+      throw new BadRequestException(
+        'Manifestação só é permitida em NF-es recebidas',
+      );
     if (!nfe.chave) throw new BadRequestException('NF-e sem chave de acesso');
 
     const TIPO_EVENTO: Record<string, { tpEvento: string; xEvento: string }> = {
-      CIENCIA:          { tpEvento: '210210', xEvento: 'Ciencia da Operacao' },
-      CONFIRMADA:       { tpEvento: '210200', xEvento: 'Confirmacao da Operacao' },
-      DESCONHECIMENTO:  { tpEvento: '220200', xEvento: 'Desconhecimento da Operacao' },
-      NAO_REALIZADA:    { tpEvento: '210240', xEvento: 'Operacao nao Realizada' },
+      CIENCIA: { tpEvento: '210210', xEvento: 'Ciencia da Operacao' },
+      CONFIRMADA: { tpEvento: '210200', xEvento: 'Confirmacao da Operacao' },
+      DESCONHECIMENTO: {
+        tpEvento: '220200',
+        xEvento: 'Desconhecimento da Operacao',
+      },
+      NAO_REALIZADA: { tpEvento: '210240', xEvento: 'Operacao nao Realizada' },
     };
 
     const { tpEvento, xEvento } = TIPO_EVENTO[tipo];
 
-    if ((tipo === 'DESCONHECIMENTO' || tipo === 'NAO_REALIZADA') && !justificativa) {
-      throw new BadRequestException('Justificativa obrigatória para este tipo de manifestação (mínimo 15 caracteres)');
+    if (
+      (tipo === 'DESCONHECIMENTO' || tipo === 'NAO_REALIZADA') &&
+      !justificativa
+    ) {
+      throw new BadRequestException(
+        'Justificativa obrigatória para este tipo de manifestação (mínimo 15 caracteres)',
+      );
     }
     if (justificativa && justificativa.length < 15) {
-      throw new BadRequestException('Justificativa deve ter no mínimo 15 caracteres');
+      throw new BadRequestException(
+        'Justificativa deve ter no mínimo 15 caracteres',
+      );
     }
 
-    const company = await this.prisma.company.findFirst({ where: { id: companyId } });
+    const company = await this.prisma.company.findFirst({
+      where: { id: companyId },
+    });
     const cnpj = company!.cnpj!.replace(/\D/g, '');
-    const { fileBuffer, password } = await this.certificates.getForIntegration(companyId);
+    const { fileBuffer, password } =
+      await this.certificates.getForIntegration(companyId);
     const httpsAgent = this.buildHttpsAgent(fileBuffer, password);
 
     const dhEvento = new Date().toISOString().replace('Z', '-00:00');
     const nSeqEvento = '1';
     const tpAmb = ENV === 'prod' ? '1' : '2';
 
-    const soapBody = this.buildManifestacaoSoap(cnpj, nfe.chave, tpEvento, xEvento, dhEvento, nSeqEvento, tpAmb, justificativa);
+    const soapBody = this.buildManifestacaoSoap(
+      cnpj,
+      nfe.chave,
+      tpEvento,
+      xEvento,
+      dhEvento,
+      nSeqEvento,
+      tpAmb,
+      justificativa,
+    );
 
     const RECEPCAO_URL = {
-      homolog: 'https://hom.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
+      homolog:
+        'https://hom.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
       prod: 'https://www.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
     };
 
@@ -979,21 +1303,28 @@ export class SefazService {
       const response = await axios.post<string>(RECEPCAO_URL[ENV], soapBody, {
         httpsAgent,
         headers: {
-          'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEvento"',
+          'Content-Type':
+            'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEvento"',
         },
         timeout: 30000,
       });
       responseXml = response.data;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Erro ao conectar na SEFAZ';
+      const msg =
+        err instanceof Error ? err.message : 'Erro ao conectar na SEFAZ';
       throw new BadRequestException(`Erro na comunicação com SEFAZ: ${msg}`);
     }
 
-    const parsed = await parseStringPromise(responseXml, { explicitArray: false });
-    const body = parsed?.['soap:Envelope']?.['soap:Body'] ?? parsed?.['s:Envelope']?.['s:Body'];
+    const parsed = await parseStringPromise(responseXml, {
+      explicitArray: false,
+    });
+    const body =
+      parsed?.['soap:Envelope']?.['soap:Body'] ??
+      parsed?.['s:Envelope']?.['s:Body'];
     const retEvento =
-      body?.['nfeRecepcaoEventoNFResult']?.['retEnvEvento']?.['retEvento']?.['infEvento'] ??
-      body?.['retEnvEvento']?.['retEvento']?.['infEvento'];
+      body?.['nfeRecepcaoEventoNFResult']?.['retEnvEvento']?.['retEvento']?.[
+        'infEvento'
+      ] ?? body?.['retEnvEvento']?.['retEvento']?.['infEvento'];
 
     const cStat = retEvento?.['cStat'] as string;
     const xMotivo = retEvento?.['xMotivo'] as string;
@@ -1001,7 +1332,9 @@ export class SefazService {
 
     // 135 = evento registrado, 136 = vinculado
     if (cStat !== '135' && cStat !== '136') {
-      throw new BadRequestException(`SEFAZ recusou manifestação: ${cStat} - ${xMotivo}`);
+      throw new BadRequestException(
+        `SEFAZ recusou manifestação: ${cStat} - ${xMotivo}`,
+      );
     }
 
     // Atualiza manifestação na NF-e
@@ -1026,7 +1359,12 @@ export class SefazService {
       },
     });
 
-    return { sucesso: true, manifestacao: tipo, protocolo: nProt, motivo: xMotivo };
+    return {
+      sucesso: true,
+      manifestacao: tipo,
+      protocolo: nProt,
+      motivo: xMotivo,
+    };
   }
 
   private buildManifestacaoSoap(
@@ -1076,11 +1414,16 @@ export class SefazService {
 </soap12:Envelope>`;
   }
 
-  private async ensureAccess(teamId: string, companyId: string, userId: string) {
+  private async ensureAccess(
+    teamId: string,
+    companyId: string,
+    userId: string,
+  ) {
     const member = await this.prisma.teamMember.findUnique({
       where: { teamId_userId: { teamId, userId }, isActive: true },
     });
-    if (!member) throw new BadRequestException('Você não é membro dessa equipe');
+    if (!member)
+      throw new BadRequestException('Você não é membro dessa equipe');
     const company = await this.prisma.company.findFirst({
       where: { id: companyId, teamId, isActive: true },
     });

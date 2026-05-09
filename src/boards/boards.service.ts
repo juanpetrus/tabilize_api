@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../database/index.js';
 import { CreateBoardDto } from './dto/create-board.dto.js';
 import { UpdateBoardDto } from './dto/update-board.dto.js';
@@ -36,7 +40,12 @@ export class BoardsService {
     return board;
   }
 
-  async update(teamId: string, boardId: string, userId: string, dto: UpdateBoardDto) {
+  async update(
+    teamId: string,
+    boardId: string,
+    userId: string,
+    dto: UpdateBoardDto,
+  ) {
     await this.ensureTeamMember(teamId, userId);
 
     const board = await this.prisma.board.findFirst({

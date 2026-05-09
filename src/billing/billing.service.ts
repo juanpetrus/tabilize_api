@@ -1,4 +1,9 @@
-import { Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import Stripe from 'stripe';
 import { PrismaService } from '../database/index.js';
 import { MailService } from '../mail/mail.service.js';
@@ -15,7 +20,15 @@ export class BillingService {
   getPlans() {
     return this.prisma.plan.findMany({
       where: { isActive: true },
-      select: { id: true, name: true, description: true, priceMonthly: true, priceYearly: true, features: true, url: true },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        priceMonthly: true,
+        priceYearly: true,
+        features: true,
+        url: true,
+      },
       orderBy: { priceMonthly: 'asc' },
     });
   }
@@ -32,7 +45,14 @@ export class BillingService {
         subscriptionId: true,
         billingCycle: true,
         plan: {
-          select: { id: true, name: true, description: true, priceMonthly: true, priceYearly: true, features: true },
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            priceMonthly: true,
+            priceYearly: true,
+            features: true,
+          },
         },
       },
     });
@@ -50,8 +70,12 @@ export class BillingService {
       const item = sub.items.data[0];
       stripeSubscription = {
         stripeStatus: sub.status,
-        currentPeriodStart: item ? new Date(item.current_period_start * 1000) : null,
-        currentPeriodEnd: item ? new Date(item.current_period_end * 1000) : null,
+        currentPeriodStart: item
+          ? new Date(item.current_period_start * 1000)
+          : null,
+        currentPeriodEnd: item
+          ? new Date(item.current_period_end * 1000)
+          : null,
         cancelAtPeriodEnd: sub.cancel_at_period_end,
         cancelAt: sub.cancel_at ? new Date(sub.cancel_at * 1000) : null,
       };
@@ -80,26 +104,34 @@ export class BillingService {
     const plan = await this.prisma.plan.findUnique({ where: { id: planId } });
     if (!plan) throw new NotFoundException('Plano não encontrado');
 
-    const priceId = period === 'yearly' ? plan.idProductYearly : plan.idProductMonthly;
-    if (!priceId) throw new BadRequestException('Preço não configurado para este plano');
+    const priceId =
+      period === 'yearly' ? plan.idProductYearly : plan.idProductMonthly;
+    if (!priceId)
+      throw new BadRequestException('Preço não configurado para este plano');
 
     const team = await this.prisma.team.findUnique({ where: { id: teamId } });
 
     if (team?.subscriptionId) {
       const existing = await stripe.subscriptions.retrieve(team.subscriptionId);
       if (['active', 'trialing'].includes(existing.status)) {
-        throw new BadRequestException('Equipe já possui assinatura ativa. Use o endpoint de upgrade.');
+        throw new BadRequestException(
+          'Equipe já possui assinatura ativa. Use o endpoint de upgrade.',
+        );
       }
       if (['incomplete', 'past_due'].includes(existing.status)) {
         await stripe.subscriptions.cancel(team.subscriptionId);
       }
     }
 
-    const customerId = team?.customerId ?? (await stripe.customers.create({
-      name,
-      email,
-      metadata: { teamId },
-    })).id;
+    const customerId =
+      team?.customerId ??
+      (
+        await stripe.customers.create({
+          name,
+          email,
+          metadata: { teamId },
+        })
+      ).id;
 
     const subscription = await stripe.subscriptions.create({
       customer: customerId,
@@ -141,11 +173,16 @@ export class BillingService {
       select: { subscriptionId: true },
     });
 
-    if (!team?.subscriptionId) throw new BadRequestException('Nenhuma assinatura ativa encontrada');
+    if (!team?.subscriptionId)
+      throw new BadRequestException('Nenhuma assinatura ativa encontrada');
 
-    const subscription = await stripe.subscriptions.retrieve(team.subscriptionId);
+    const subscription = await stripe.subscriptions.retrieve(
+      team.subscriptionId,
+    );
     if (!['active', 'trialing'].includes(subscription.status)) {
-      throw new BadRequestException('Assinatura não pode ser cancelada no estado atual');
+      throw new BadRequestException(
+        'Assinatura não pode ser cancelada no estado atual',
+      );
     }
 
     await stripe.subscriptions.update(team.subscriptionId, {
@@ -163,9 +200,12 @@ export class BillingService {
       select: { subscriptionId: true, customerId: true },
     });
 
-    if (!team?.subscriptionId) throw new BadRequestException('Nenhuma assinatura encontrada');
+    if (!team?.subscriptionId)
+      throw new BadRequestException('Nenhuma assinatura encontrada');
 
-    const subscription = await stripe.subscriptions.retrieve(team.subscriptionId);
+    const subscription = await stripe.subscriptions.retrieve(
+      team.subscriptionId,
+    );
 
     // Cancelamento agendado — só remove o agendamento
     if (subscription.cancel_at_period_end) {
@@ -176,7 +216,9 @@ export class BillingService {
       return { message: 'Cancelamento revertido. Assinatura continua ativa.' };
     }
 
-    throw new BadRequestException('Assinatura já foi cancelada. Realize um novo checkout para assinar novamente.');
+    throw new BadRequestException(
+      'Assinatura já foi cancelada. Realize um novo checkout para assinar novamente.',
+    );
   }
 
   async getInvoices(teamId: string, userId: string) {
@@ -208,20 +250,29 @@ export class BillingService {
     }));
   }
 
-  async upgradeSubscription(teamId: string, userId: string, planId: string, period: 'monthly' | 'yearly') {
+  async upgradeSubscription(
+    teamId: string,
+    userId: string,
+    planId: string,
+    period: 'monthly' | 'yearly',
+  ) {
     await this.ensureTeamOwner(teamId, userId);
 
     const team = await this.prisma.team.findUnique({ where: { id: teamId } });
-    if (!team?.subscriptionId) throw new BadRequestException('Nenhuma assinatura ativa encontrada');
+    if (!team?.subscriptionId)
+      throw new BadRequestException('Nenhuma assinatura ativa encontrada');
 
     const plan = await this.prisma.plan.findUnique({ where: { id: planId } });
     if (!plan) throw new NotFoundException('Plano não encontrado');
 
-    const priceId = period === 'yearly' ? plan.idProductYearly : plan.idProductMonthly;
-    if (!priceId) throw new BadRequestException('Preço não configurado para este plano');
+    const priceId =
+      period === 'yearly' ? plan.idProductYearly : plan.idProductMonthly;
+    if (!priceId)
+      throw new BadRequestException('Preço não configurado para este plano');
 
     const existing = await stripe.subscriptions.retrieve(team.subscriptionId);
-    if (existing.status !== 'active') throw new BadRequestException('Assinatura não está ativa');
+    if (existing.status !== 'active')
+      throw new BadRequestException('Assinatura não está ativa');
 
     await stripe.subscriptions.update(team.subscriptionId, {
       items: [{ id: existing.items.data[0].id, price: priceId }],
@@ -249,7 +300,7 @@ export class BillingService {
     }
 
     if (event.type === 'customer.subscription.updated') {
-      const subscription = event.data.object as Stripe.Subscription;
+      const subscription = event.data.object;
       const teamId = subscription.metadata?.['teamId'];
       const planId = subscription.metadata?.['planId'];
 
@@ -260,10 +311,14 @@ export class BillingService {
 
       if (subscription.status === 'trialing') {
         status = 'TRIAL';
-        expiry = subscription.trial_end ? new Date(subscription.trial_end * 1000) : null;
+        expiry = subscription.trial_end
+          ? new Date(subscription.trial_end * 1000)
+          : null;
         const owner = await this.getTeamOwner(teamId);
         if (owner && expiry) {
-          this.mail.sendTrialCardSaved(owner.email, owner.name, expiry).catch(() => null);
+          this.mail
+            .sendTrialCardSaved(owner.email, owner.name, expiry)
+            .catch(() => null);
         }
       } else if (subscription.status === 'active') {
         status = 'ACTIVE';
@@ -286,8 +341,13 @@ export class BillingService {
     }
 
     if (event.type === 'invoice.paid') {
-      const invoice = event.data.object as Stripe.Invoice;
-      const parent = invoice.parent as { subscription_details?: { subscription?: string; metadata?: Record<string, string> } } | null;
+      const invoice = event.data.object;
+      const parent = invoice.parent as {
+        subscription_details?: {
+          subscription?: string;
+          metadata?: Record<string, string>;
+        };
+      } | null;
       const subscriptionId = parent?.subscription_details?.subscription ?? null;
       const teamId = parent?.subscription_details?.metadata?.['teamId'];
       const planId = parent?.subscription_details?.metadata?.['planId'];
@@ -310,13 +370,17 @@ export class BillingService {
 
       const owner = await this.getTeamOwner(teamId);
       if (owner && expiry) {
-        this.mail.sendSubscriptionActive(owner.email, owner.name, expiry).catch(() => null);
+        this.mail
+          .sendSubscriptionActive(owner.email, owner.name, expiry)
+          .catch(() => null);
       }
     }
 
     if (event.type === 'invoice.payment_failed') {
-      const invoice = event.data.object as Stripe.Invoice;
-      const parent = invoice.parent as { subscription_details?: { metadata?: Record<string, string> } } | null;
+      const invoice = event.data.object;
+      const parent = invoice.parent as {
+        subscription_details?: { metadata?: Record<string, string> };
+      } | null;
       const teamId = parent?.subscription_details?.metadata?.['teamId'];
 
       if (!teamId) return { received: true };
@@ -333,7 +397,7 @@ export class BillingService {
     }
 
     if (event.type === 'customer.subscription.deleted') {
-      const subscription = event.data.object as Stripe.Subscription;
+      const subscription = event.data.object;
       const teamId = subscription.metadata?.['teamId'];
 
       await this.prisma.team.updateMany({
@@ -348,7 +412,9 @@ export class BillingService {
           : new Date();
         const owner = await this.getTeamOwner(teamId);
         if (owner) {
-          this.mail.sendSubscriptionCancelled(owner.email, owner.name, expiry).catch(() => null);
+          this.mail
+            .sendSubscriptionCancelled(owner.email, owner.name, expiry)
+            .catch(() => null);
         }
       }
     }
@@ -369,6 +435,9 @@ export class BillingService {
       where: { id: teamId, ownerId: userId, isActive: true },
     });
 
-    if (!team) throw new ForbiddenException('Apenas o dono do escritório pode gerenciar assinaturas');
+    if (!team)
+      throw new ForbiddenException(
+        'Apenas o dono do escritório pode gerenciar assinaturas',
+      );
   }
 }

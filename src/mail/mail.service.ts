@@ -34,7 +34,11 @@ export class MailService {
     });
   }
 
-  async sendSubscriptionActive(to: string, name: string, nextBillingDate: Date) {
+  async sendSubscriptionActive(
+    to: string,
+    name: string,
+    nextBillingDate: Date,
+  ) {
     const nextDate = nextBillingDate.toLocaleDateString('pt-BR');
     await resend.emails.send({
       from: FROM,

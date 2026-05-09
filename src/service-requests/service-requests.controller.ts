@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { ServiceRequestsService } from './service-requests.service.js';
 import { CreateServiceRequestDto } from './dto/create-service-request.dto.js';
 import { UpdateServiceRequestStatusDto } from './dto/update-service-request-status.dto.js';
@@ -17,7 +26,9 @@ interface ClientAuthRequest {
 @UseGuards(JwtAuthGuard)
 @Controller('teams/:teamId/companies/:companyId/service-requests')
 export class ServiceRequestsController {
-  constructor(private readonly serviceRequestsService: ServiceRequestsService) {}
+  constructor(
+    private readonly serviceRequestsService: ServiceRequestsService,
+  ) {}
 
   @Get()
   findAll(
@@ -25,7 +36,11 @@ export class ServiceRequestsController {
     @Param('companyId') companyId: string,
     @Req() req: AuthRequest,
   ) {
-    return this.serviceRequestsService.findAllForTeam(teamId, companyId, req.user.id);
+    return this.serviceRequestsService.findAllForTeam(
+      teamId,
+      companyId,
+      req.user.id,
+    );
   }
 
   @Patch(':requestId/status')
@@ -36,7 +51,13 @@ export class ServiceRequestsController {
     @Req() req: AuthRequest,
     @Body() dto: UpdateServiceRequestStatusDto,
   ) {
-    return this.serviceRequestsService.updateStatus(teamId, companyId, requestId, req.user.id, dto);
+    return this.serviceRequestsService.updateStatus(
+      teamId,
+      companyId,
+      requestId,
+      req.user.id,
+      dto,
+    );
   }
 }
 
@@ -44,7 +65,9 @@ export class ServiceRequestsController {
 @UseGuards(JwtAuthGuard)
 @Controller('teams/:teamId/service-requests')
 export class TeamServiceRequestsController {
-  constructor(private readonly serviceRequestsService: ServiceRequestsService) {}
+  constructor(
+    private readonly serviceRequestsService: ServiceRequestsService,
+  ) {}
 
   @Get()
   findAll(@Param('teamId') teamId: string, @Req() req: AuthRequest) {
@@ -56,15 +79,24 @@ export class TeamServiceRequestsController {
 @UseGuards(ClientJwtGuard)
 @Controller('client/service-requests')
 export class ClientServiceRequestsController {
-  constructor(private readonly serviceRequestsService: ServiceRequestsService) {}
+  constructor(
+    private readonly serviceRequestsService: ServiceRequestsService,
+  ) {}
 
   @Post()
   create(@Req() req: ClientAuthRequest, @Body() dto: CreateServiceRequestDto) {
-    return this.serviceRequestsService.create(req.user.id, req.user.companyId, dto);
+    return this.serviceRequestsService.create(
+      req.user.id,
+      req.user.companyId,
+      dto,
+    );
   }
 
   @Get()
   findAll(@Req() req: ClientAuthRequest) {
-    return this.serviceRequestsService.findAllForClient(req.user.id, req.user.companyId);
+    return this.serviceRequestsService.findAllForClient(
+      req.user.id,
+      req.user.companyId,
+    );
   }
 }

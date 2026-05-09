@@ -59,7 +59,11 @@ export class ClientAuthService {
       return user;
     });
 
-    const token = this.generateToken(companyUser.id, companyUser.email, company.id);
+    const token = this.generateToken(
+      companyUser.id,
+      companyUser.email,
+      company.id,
+    );
     return this.formatResponse(companyUser, token);
   }
 
@@ -70,25 +74,44 @@ export class ClientAuthService {
         company: { select: { id: true, name: true, isActive: true } },
         companies: {
           include: {
-            company: { select: { id: true, name: true, cnpj: true, isActive: true } },
+            company: {
+              select: { id: true, name: true, cnpj: true, isActive: true },
+            },
           },
         },
       },
     });
 
-    if (!companyUser || !companyUser.isActive || !companyUser.company.isActive) {
+    if (
+      !companyUser ||
+      !companyUser.isActive ||
+      !companyUser.company.isActive
+    ) {
       throw new UnauthorizedException('Credenciais inválidas');
     }
 
-    const isPasswordValid = await bcrypt.compare(dto.password, companyUser.password);
+    const isPasswordValid = await bcrypt.compare(
+      dto.password,
+      companyUser.password,
+    );
 
-    if (!isPasswordValid) throw new UnauthorizedException('Credenciais inválidas');
+    if (!isPasswordValid)
+      throw new UnauthorizedException('Credenciais inválidas');
 
     // Usa empresa ativa ou a padrão
-    const activeCompanyId = companyUser.activeCompanyId || companyUser.companyId;
+    const activeCompanyId =
+      companyUser.activeCompanyId || companyUser.companyId;
 
-    const token = this.generateToken(companyUser.id, companyUser.email, activeCompanyId);
-    return this.formatResponseWithCompanies(companyUser, token, activeCompanyId);
+    const token = this.generateToken(
+      companyUser.id,
+      companyUser.email,
+      activeCompanyId,
+    );
+    return this.formatResponseWithCompanies(
+      companyUser,
+      token,
+      activeCompanyId,
+    );
   }
 
   async validateCompanyUser(companyUserId: string) {
@@ -155,14 +178,20 @@ export class ClientAuthService {
       include: {
         companies: {
           include: {
-            company: { select: { id: true, name: true, cnpj: true, isActive: true } },
+            company: {
+              select: { id: true, name: true, cnpj: true, isActive: true },
+            },
           },
         },
       },
     });
 
     // Gera novo token com a empresa ativa
-    const token = this.generateToken(companyUser.id, companyUser.email, companyId);
+    const token = this.generateToken(
+      companyUser.id,
+      companyUser.email,
+      companyId,
+    );
 
     return {
       companyUser: {
@@ -195,7 +224,8 @@ export class ClientAuthService {
       },
     });
 
-    if (existing) throw new ConflictException('Usuário já tem acesso a esta empresa');
+    if (existing)
+      throw new ConflictException('Usuário já tem acesso a esta empresa');
 
     return this.prisma.companyUserCompany.create({
       data: {
@@ -209,7 +239,11 @@ export class ClientAuthService {
     });
   }
 
-  private generateToken(companyUserId: string, email: string, companyId: string) {
+  private generateToken(
+    companyUserId: string,
+    email: string,
+    companyId: string,
+  ) {
     return this.jwtService.sign(
       { sub: companyUserId, email, companyId, type: 'client' },
       { expiresIn: 60 * 60 * 24 * 7 },
@@ -239,7 +273,12 @@ export class ClientAuthService {
       companyId: string;
       companies: Array<{
         isDefault: boolean;
-        company: { id: string; name: string; cnpj: string | null; isActive: boolean };
+        company: {
+          id: string;
+          name: string;
+          cnpj: string | null;
+          isActive: boolean;
+        };
       }>;
     },
     token: string,

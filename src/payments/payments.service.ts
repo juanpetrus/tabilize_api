@@ -1,15 +1,28 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../database/index.js';
 import { CreatePaymentDto } from './dto/create-payment.dto.js';
 import { UpdatePaymentStatusDto } from './dto/update-payment-status.dto.js';
-import { PaymentStatus, RecurrenceInterval, TeamRole } from '../../generated/prisma/enums.js';
+import {
+  PaymentStatus,
+  RecurrenceInterval,
+  TeamRole,
+} from '../../generated/prisma/enums.js';
 import { randomUUID } from 'crypto';
 
 @Injectable()
 export class PaymentsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(teamId: string, companyId: string, userId: string, dto: CreatePaymentDto) {
+  async create(
+    teamId: string,
+    companyId: string,
+    userId: string,
+    dto: CreatePaymentDto,
+  ) {
     await this.ensureAccess(teamId, companyId, userId);
 
     if (!dto.isRecurring || !dto.recurrenceInterval || !dto.recurrenceEndDate) {
@@ -98,9 +111,12 @@ export class PaymentsService {
       where: { id: paymentId },
       data: {
         status: dto.status,
-        paidAt: dto.status === PaymentStatus.PAID
-          ? (dto.paidAt ? new Date(dto.paidAt) : new Date())
-          : null,
+        paidAt:
+          dto.status === PaymentStatus.PAID
+            ? dto.paidAt
+              ? new Date(dto.paidAt)
+              : new Date()
+            : null,
       },
     });
   }
@@ -110,7 +126,12 @@ export class PaymentsService {
     companyId: string,
     paymentId: string,
     userId: string,
-    dto: { description?: string; amount?: number; dueDate?: string; referenceMonth?: string | null },
+    dto: {
+      description?: string;
+      amount?: number;
+      dueDate?: string;
+      referenceMonth?: string | null;
+    },
   ) {
     await this.ensureAccess(teamId, companyId, userId);
 
@@ -125,12 +146,19 @@ export class PaymentsService {
         ...(dto.description !== undefined && { description: dto.description }),
         ...(dto.amount !== undefined && { amount: dto.amount }),
         ...(dto.dueDate !== undefined && { dueDate: new Date(dto.dueDate) }),
-        ...(dto.referenceMonth !== undefined && { referenceMonth: dto.referenceMonth }),
+        ...(dto.referenceMonth !== undefined && {
+          referenceMonth: dto.referenceMonth,
+        }),
       },
     });
   }
 
-  async remove(teamId: string, companyId: string, paymentId: string, userId: string) {
+  async remove(
+    teamId: string,
+    companyId: string,
+    paymentId: string,
+    userId: string,
+  ) {
     await this.ensureAccess(teamId, companyId, userId);
 
     const payment = await this.prisma.payment.findFirst({
@@ -145,16 +173,23 @@ export class PaymentsService {
     });
   }
 
-  private generateDates(start: Date, end: Date, interval: RecurrenceInterval): Date[] {
+  private generateDates(
+    start: Date,
+    end: Date,
+    interval: RecurrenceInterval,
+  ): Date[] {
     const dates: Date[] = [];
     const current = new Date(start);
 
     while (current <= end) {
       dates.push(new Date(current));
 
-      if (interval === RecurrenceInterval.MONTHLY) current.setMonth(current.getMonth() + 1);
-      else if (interval === RecurrenceInterval.QUARTERLY) current.setMonth(current.getMonth() + 3);
-      else if (interval === RecurrenceInterval.YEARLY) current.setFullYear(current.getFullYear() + 1);
+      if (interval === RecurrenceInterval.MONTHLY)
+        current.setMonth(current.getMonth() + 1);
+      else if (interval === RecurrenceInterval.QUARTERLY)
+        current.setMonth(current.getMonth() + 3);
+      else if (interval === RecurrenceInterval.YEARLY)
+        current.setFullYear(current.getFullYear() + 1);
     }
 
     return dates;
@@ -164,13 +199,19 @@ export class PaymentsService {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
   }
 
-  private async ensureAccess(teamId: string, companyId: string, userId: string) {
+  private async ensureAccess(
+    teamId: string,
+    companyId: string,
+    userId: string,
+  ) {
     const member = await this.prisma.teamMember.findUnique({
       where: { teamId_userId: { teamId, userId }, isActive: true },
     });
     if (!member) throw new ForbiddenException('Você não é membro dessa equipe');
     if (member.role !== TeamRole.OWNER && member.role !== TeamRole.ADMIN) {
-      throw new ForbiddenException('Acesso ao financeiro restrito a OWNER e ADMIN');
+      throw new ForbiddenException(
+        'Acesso ao financeiro restrito a OWNER e ADMIN',
+      );
     }
 
     const company = await this.prisma.company.findFirst({
@@ -185,7 +226,9 @@ export class PaymentsService {
     });
     if (!member) throw new ForbiddenException('Você não é membro dessa equipe');
     if (member.role !== TeamRole.OWNER && member.role !== TeamRole.ADMIN) {
-      throw new ForbiddenException('Acesso ao financeiro restrito a OWNER e ADMIN');
+      throw new ForbiddenException(
+        'Acesso ao financeiro restrito a OWNER e ADMIN',
+      );
     }
   }
 

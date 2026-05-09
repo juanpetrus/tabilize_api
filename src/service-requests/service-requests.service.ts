@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../database/index.js';
 import { CreateServiceRequestDto } from './dto/create-service-request.dto.js';
 import { UpdateServiceRequestStatusDto } from './dto/update-service-request-status.dto.js';
@@ -13,7 +17,11 @@ export class ServiceRequestsService {
   constructor(private readonly prisma: PrismaService) {}
 
   // Cliente abre um pedido
-  async create(companyUserId: string, companyId: string, dto: CreateServiceRequestDto) {
+  async create(
+    companyUserId: string,
+    companyId: string,
+    dto: CreateServiceRequestDto,
+  ) {
     await this.ensureCompanyUser(companyId, companyUserId);
 
     return this.prisma.serviceRequest.create({
@@ -107,7 +115,11 @@ export class ServiceRequestsService {
     }
   }
 
-  private async ensureAccess(teamId: string, companyId: string, userId: string) {
+  private async ensureAccess(
+    teamId: string,
+    companyId: string,
+    userId: string,
+  ) {
     await this.ensureTeamMember(teamId, userId);
 
     const company = await this.prisma.company.findFirst({

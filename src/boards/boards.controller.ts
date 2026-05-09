@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { BoardsService } from './boards.service.js';
 import { CreateBoardDto } from './dto/create-board.dto.js';
 import { UpdateBoardDto } from './dto/update-board.dto.js';
@@ -23,10 +33,7 @@ export class BoardsController {
   }
 
   @Get()
-  findAll(
-    @Param('teamId') teamId: string,
-    @Req() req: AuthRequest,
-  ) {
+  findAll(@Param('teamId') teamId: string, @Req() req: AuthRequest) {
     return this.boardsService.findAllByTeam(teamId, req.user.id);
   }
 

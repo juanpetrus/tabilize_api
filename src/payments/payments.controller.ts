@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { PaymentsService } from './payments.service.js';
 import { CreatePaymentDto } from './dto/create-payment.dto.js';
 import { UpdatePaymentStatusDto } from './dto/update-payment-status.dto.js';
@@ -47,7 +57,11 @@ export class PaymentsController {
     @Param('companyId') companyId: string,
     @Req() req: AuthRequest,
   ) {
-    return this.paymentsService.findAllByCompany(teamId, companyId, req.user.id);
+    return this.paymentsService.findAllByCompany(
+      teamId,
+      companyId,
+      req.user.id,
+    );
   }
 
   @Patch(':paymentId')
@@ -56,9 +70,21 @@ export class PaymentsController {
     @Param('companyId') companyId: string,
     @Param('paymentId') paymentId: string,
     @Req() req: AuthRequest,
-    @Body() dto: { description?: string; amount?: number; dueDate?: string; referenceMonth?: string | null },
+    @Body()
+    dto: {
+      description?: string;
+      amount?: number;
+      dueDate?: string;
+      referenceMonth?: string | null;
+    },
   ) {
-    return this.paymentsService.update(teamId, companyId, paymentId, req.user.id, dto);
+    return this.paymentsService.update(
+      teamId,
+      companyId,
+      paymentId,
+      req.user.id,
+      dto,
+    );
   }
 
   @Patch(':paymentId/status')
@@ -69,7 +95,13 @@ export class PaymentsController {
     @Req() req: AuthRequest,
     @Body() dto: UpdatePaymentStatusDto,
   ) {
-    return this.paymentsService.updateStatus(teamId, companyId, paymentId, req.user.id, dto);
+    return this.paymentsService.updateStatus(
+      teamId,
+      companyId,
+      paymentId,
+      req.user.id,
+      dto,
+    );
   }
 
   @Delete(':paymentId')
@@ -79,7 +111,12 @@ export class PaymentsController {
     @Param('paymentId') paymentId: string,
     @Req() req: AuthRequest,
   ) {
-    return this.paymentsService.remove(teamId, companyId, paymentId, req.user.id);
+    return this.paymentsService.remove(
+      teamId,
+      companyId,
+      paymentId,
+      req.user.id,
+    );
   }
 }
 
@@ -91,6 +128,9 @@ export class ClientPaymentsController {
 
   @Get()
   findAll(@Req() req: ClientAuthRequest) {
-    return this.paymentsService.findAllForClient(req.user.companyId, req.user.id);
+    return this.paymentsService.findAllForClient(
+      req.user.companyId,
+      req.user.id,
+    );
   }
 }

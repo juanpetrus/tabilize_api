@@ -1,4 +1,9 @@
-import { CanActivate, ExecutionContext, Injectable, ForbiddenException } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../database/index.js';
 
 @Injectable()
@@ -6,7 +11,9 @@ export class SubscriptionGuard implements CanActivate {
   constructor(private readonly prisma: PrismaService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context.switchToHttp().getRequest<{ user?: { id: string }; params?: { teamId?: string } }>();
+    const request = context
+      .switchToHttp()
+      .getRequest<{ user?: { id: string }; params?: { teamId?: string } }>();
     const userId = request.user?.id;
     const teamId = request.params?.teamId;
 
@@ -24,11 +31,13 @@ export class SubscriptionGuard implements CanActivate {
     if (subscriptionStatus === 'ACTIVE') return true;
 
     if (subscriptionStatus === 'TRIAL') {
-      if (subscriptionExpiry && subscriptionExpiry.getTime() > Date.now()) return true;
+      if (subscriptionExpiry && subscriptionExpiry.getTime() > Date.now())
+        return true;
 
       throw new ForbiddenException({
         code: 'TRIAL_EXPIRED',
-        message: 'Seu período de trial expirou. Assine um plano para continuar.',
+        message:
+          'Seu período de trial expirou. Assine um plano para continuar.',
       });
     }
 

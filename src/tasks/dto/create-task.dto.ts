@@ -1,4 +1,11 @@
-import { IsString, IsNotEmpty, IsOptional, IsEnum, IsDateString, IsUUID } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsEnum,
+  IsDateString,
+  IsUUID,
+} from 'class-validator';
 import { TaskPriority } from '../../../generated/prisma/enums.js';
 
 export class CreateTaskDto {

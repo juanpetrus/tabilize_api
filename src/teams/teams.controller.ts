@@ -64,7 +64,12 @@ export class TeamsController {
     @Req() req: AuthRequest,
     @Body() dto: UpdateMemberRoleDto,
   ) {
-    return this.teamsService.updateMemberRole(teamId, memberId, req.user.id, dto);
+    return this.teamsService.updateMemberRole(
+      teamId,
+      memberId,
+      req.user.id,
+      dto,
+    );
   }
 
   @Delete(':teamId/members/:memberId')

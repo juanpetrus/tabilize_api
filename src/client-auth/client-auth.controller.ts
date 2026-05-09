@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { ClientAuthService } from './client-auth.service.js';
 import { ClientRegisterDto } from './dto/client-register.dto.js';
 import { ClientLoginDto } from './dto/client-login.dto.js';
@@ -13,7 +21,10 @@ export class ClientAuthController {
   constructor(private readonly clientAuthService: ClientAuthService) {}
 
   @Post('companies/:companyId/register')
-  register(@Param('companyId') companyId: string, @Body() dto: ClientRegisterDto) {
+  register(
+    @Param('companyId') companyId: string,
+    @Body() dto: ClientRegisterDto,
+  ) {
     return this.clientAuthService.register(companyId, dto);
   }
 
@@ -43,7 +54,10 @@ export class ClientAuthController {
    */
   @UseGuards(ClientJwtGuard)
   @Post('switch-company/:companyId')
-  switchCompany(@Req() req: ClientAuthRequest, @Param('companyId') companyId: string) {
+  switchCompany(
+    @Req() req: ClientAuthRequest,
+    @Param('companyId') companyId: string,
+  ) {
     return this.clientAuthService.switchCompany(req.user.id, companyId);
   }
 }

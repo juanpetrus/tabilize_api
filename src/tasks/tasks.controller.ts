@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { TasksService } from './tasks.service.js';
 import { CreateTaskDto } from './dto/create-task.dto.js';
 import { UpdateTaskDto } from './dto/update-task.dto.js';
@@ -34,7 +45,14 @@ export class TasksController {
     @Query('assigneeId') assigneeId?: string,
     @Query('includeSubtasks') includeSubtasks?: string,
   ) {
-    return this.tasksService.findAllByTeam(teamId, req.user.id, boardId, companyId, assigneeId, includeSubtasks === 'true');
+    return this.tasksService.findAllByTeam(
+      teamId,
+      req.user.id,
+      boardId,
+      companyId,
+      assigneeId,
+      includeSubtasks === 'true',
+    );
   }
 
   @Patch('reorder')
@@ -83,7 +101,12 @@ export class TasksController {
     @Req() req: AuthRequest,
     @Body() dto: CreateChecklistItemDto,
   ) {
-    return this.tasksService.createChecklistItem(teamId, taskId, req.user.id, dto);
+    return this.tasksService.createChecklistItem(
+      teamId,
+      taskId,
+      req.user.id,
+      dto,
+    );
   }
 
   @Get(':taskId/checklist')
@@ -103,7 +126,13 @@ export class TasksController {
     @Req() req: AuthRequest,
     @Body() dto: UpdateChecklistItemDto,
   ) {
-    return this.tasksService.updateChecklistItem(teamId, taskId, itemId, req.user.id, dto);
+    return this.tasksService.updateChecklistItem(
+      teamId,
+      taskId,
+      itemId,
+      req.user.id,
+      dto,
+    );
   }
 
   @Patch(':taskId/checklist/:itemId/toggle')
@@ -113,7 +142,12 @@ export class TasksController {
     @Param('itemId') itemId: string,
     @Req() req: AuthRequest,
   ) {
-    return this.tasksService.toggleChecklistItem(teamId, taskId, itemId, req.user.id);
+    return this.tasksService.toggleChecklistItem(
+      teamId,
+      taskId,
+      itemId,
+      req.user.id,
+    );
   }
 
   @Delete(':taskId/checklist/:itemId')
@@ -123,6 +157,11 @@ export class TasksController {
     @Param('itemId') itemId: string,
     @Req() req: AuthRequest,
   ) {
-    return this.tasksService.removeChecklistItem(teamId, taskId, itemId, req.user.id);
+    return this.tasksService.removeChecklistItem(
+      teamId,
+      taskId,
+      itemId,
+      req.user.id,
+    );
   }
 }

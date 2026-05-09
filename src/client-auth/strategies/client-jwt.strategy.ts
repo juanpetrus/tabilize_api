@@ -11,7 +11,10 @@ export interface ClientJwtPayload {
 }
 
 @Injectable()
-export class ClientJwtStrategy extends PassportStrategy(Strategy, 'client-jwt') {
+export class ClientJwtStrategy extends PassportStrategy(
+  Strategy,
+  'client-jwt',
+) {
   constructor(private readonly clientAuthService: ClientAuthService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -25,7 +28,9 @@ export class ClientJwtStrategy extends PassportStrategy(Strategy, 'client-jwt') 
       throw new UnauthorizedException('Token inválido para portal cliente');
     }
 
-    const companyUser = await this.clientAuthService.validateCompanyUser(payload.sub);
+    const companyUser = await this.clientAuthService.validateCompanyUser(
+      payload.sub,
+    );
 
     if (!companyUser) {
       throw new UnauthorizedException('Usuário não encontrado ou inativo');

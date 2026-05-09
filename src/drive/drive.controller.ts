@@ -1,4 +1,17 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { DriveService } from './drive.service.js';
 import { CreateFolderDto } from './dto/create-folder.dto.js';
@@ -31,13 +44,21 @@ export class DriveController {
 
   // Listar itens de uma pasta específica
   @Get('folder')
-  findByPath(@Param('teamId') teamId: string, @Query('path') path: string, @Req() req: AuthRequest) {
+  findByPath(
+    @Param('teamId') teamId: string,
+    @Query('path') path: string,
+    @Req() req: AuthRequest,
+  ) {
     return this.driveService.findByPath(teamId, req.user.id, path || '/');
   }
 
   // Criar pasta
   @Post('folder')
-  createFolder(@Param('teamId') teamId: string, @Req() req: AuthRequest, @Body() dto: CreateFolderDto) {
+  createFolder(
+    @Param('teamId') teamId: string,
+    @Req() req: AuthRequest,
+    @Body() dto: CreateFolderDto,
+  ) {
     return this.driveService.createFolder(teamId, req.user.id, dto);
   }
 
@@ -66,7 +87,11 @@ export class DriveController {
 
   // Deletar item
   @Delete(':itemId')
-  deleteItem(@Param('teamId') teamId: string, @Param('itemId') itemId: string, @Req() req: AuthRequest) {
+  deleteItem(
+    @Param('teamId') teamId: string,
+    @Param('itemId') itemId: string,
+    @Req() req: AuthRequest,
+  ) {
     return this.driveService.deleteItem(teamId, itemId, req.user.id);
   }
 
@@ -89,12 +114,21 @@ export class DriveController {
     @Param('companyId') companyId: string,
     @Req() req: AuthRequest,
   ) {
-    return this.driveService.removeShare(teamId, itemId, companyId, req.user.id);
+    return this.driveService.removeShare(
+      teamId,
+      itemId,
+      companyId,
+      req.user.id,
+    );
   }
 
   // Listar compartilhamentos do item
   @Get(':itemId/shares')
-  getShares(@Param('teamId') teamId: string, @Param('itemId') itemId: string, @Req() req: AuthRequest) {
+  getShares(
+    @Param('teamId') teamId: string,
+    @Param('itemId') itemId: string,
+    @Req() req: AuthRequest,
+  ) {
     return this.driveService.getShares(teamId, itemId, req.user.id);
   }
 }
@@ -113,7 +147,11 @@ export class CompanyDriveController {
     @Param('companyId') companyId: string,
     @Req() req: AuthRequest,
   ) {
-    return this.driveService.findSharedWithCompany(teamId, companyId, req.user.id);
+    return this.driveService.findSharedWithCompany(
+      teamId,
+      companyId,
+      req.user.id,
+    );
   }
 }
 
@@ -133,7 +171,11 @@ export class ClientDriveController {
   // Listar itens de uma pasta específica
   @Get('folder')
   findByPath(@Query('path') path: string, @Req() req: ClientAuthRequest) {
-    return this.driveService.findByPathForClient(req.user.companyId, req.user.id, path || '/');
+    return this.driveService.findByPathForClient(
+      req.user.companyId,
+      req.user.id,
+      path || '/',
+    );
   }
 
   // Upload de arquivo (se permitido)
@@ -145,6 +187,12 @@ export class ClientDriveController {
     @Body() body: { name?: string },
     @UploadedFile() file: Express.Multer.File,
   ) {
-    return this.driveService.uploadFileForClient(req.user.companyId, req.user.id, path || '/', file, body.name);
+    return this.driveService.uploadFileForClient(
+      req.user.companyId,
+      req.user.id,
+      path || '/',
+      file,
+      body.name,
+    );
   }
 }

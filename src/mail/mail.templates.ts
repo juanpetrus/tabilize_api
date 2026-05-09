@@ -92,7 +92,10 @@ export function welcomeTemplate(name: string, trialExpiry: string): string {
   `);
 }
 
-export function trialCardSavedTemplate(name: string, trialExpiry: string): string {
+export function trialCardSavedTemplate(
+  name: string,
+  trialExpiry: string,
+): string {
   return layout(`
     ${badge('Trial ativo', '#16a34a')}
     ${heading('Cartão salvo com sucesso ✅')}
@@ -106,7 +109,10 @@ export function trialCardSavedTemplate(name: string, trialExpiry: string): strin
   `);
 }
 
-export function subscriptionActiveTemplate(name: string, nextBillingDate: string): string {
+export function subscriptionActiveTemplate(
+  name: string,
+  nextBillingDate: string,
+): string {
   return layout(`
     ${badge('Assinatura ativa', '#16a34a')}
     ${heading('Obrigado por assinar a Tabilize! 🎉')}
@@ -131,7 +137,10 @@ export function paymentFailedTemplate(name: string): string {
   `);
 }
 
-export function subscriptionCancelledTemplate(name: string, accessUntil: string): string {
+export function subscriptionCancelledTemplate(
+  name: string,
+  accessUntil: string,
+): string {
   return layout(`
     ${badge('Cancelamento confirmado')}
     ${heading('Sua assinatura foi cancelada')}

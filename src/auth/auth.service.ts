@@ -73,10 +73,13 @@ export class AuthService {
   }
 
   async forgotPassword(dto: ForgotPasswordDto) {
-    const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
 
     // Não revela se o email existe
-    if (!user || !user.isActive) return { message: 'Se o email existir, você receberá as instruções.' };
+    if (!user || !user.isActive)
+      return { message: 'Se o email existir, você receberá as instruções.' };
 
     const token = randomBytes(32).toString('hex');
     const expiry = new Date(Date.now() + 1000 * 60 * 60); // 1 hora
@@ -87,7 +90,9 @@ export class AuthService {
     });
 
     const resetUrl = `${process.env['FRONTEND_URL']}/reset-password?token=${token}`;
-    this.mail.sendForgotPassword(user.email, user.name, resetUrl).catch(() => null);
+    this.mail
+      .sendForgotPassword(user.email, user.name, resetUrl)
+      .catch(() => null);
 
     return { message: 'Se o email existir, você receberá as instruções.' };
   }
@@ -142,7 +147,9 @@ export class AuthService {
     if (dto.name) data.name = dto.name;
 
     if (dto.email) {
-      const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
+      const existing = await this.prisma.user.findUnique({
+        where: { email: dto.email },
+      });
       if (existing && existing.id !== userId) {
         throw new ConflictException('Email já está em uso');
       }
@@ -158,7 +165,10 @@ export class AuthService {
   }
 
   async deleteUser(userId: string) {
-    await this.prisma.user.update({ where: { id: userId }, data: { isActive: false } });
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { isActive: false },
+    });
     return { message: 'Conta desativada com sucesso' };
   }
 
@@ -192,7 +202,12 @@ export class AuthService {
       const expiry = team.subscriptionExpiry;
       const trialDaysLeft =
         team.subscriptionStatus === 'TRIAL' && expiry
-          ? Math.max(0, Math.ceil((expiry.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+          ? Math.max(
+              0,
+              Math.ceil(
+                (expiry.getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+              ),
+            )
           : null;
 
       return { role, ...team, trialDaysLeft };
@@ -214,7 +229,10 @@ export class AuthService {
     );
   }
 
-  private formatAuthResponse(user: { id: string; name: string; email: string }, token: string) {
+  private formatAuthResponse(
+    user: { id: string; name: string; email: string },
+    token: string,
+  ) {
     return {
       user: {
         id: user.id,

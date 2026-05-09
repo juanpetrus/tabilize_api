@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 import * as forge from 'node-forge';
 import { PrismaService } from '../database/index.js';
@@ -127,12 +132,18 @@ export class CertificatesService {
     return { fileBuffer, password };
   }
 
-  private async parseCertificate(fileBuffer: Buffer, password: string, companyId: string) {
+  private async parseCertificate(
+    fileBuffer: Buffer,
+    password: string,
+    companyId: string,
+  ) {
     let p12Asn1: forge.asn1.Asn1;
     try {
       p12Asn1 = forge.asn1.fromDer(fileBuffer.toString('binary'));
     } catch {
-      throw new BadRequestException('Arquivo de certificado inválido ou corrompido');
+      throw new BadRequestException(
+        'Arquivo de certificado inválido ou corrompido',
+      );
     }
 
     let p12: forge.pkcs12.Pkcs12Pfx;
@@ -146,7 +157,10 @@ export class CertificatesService {
     const certBag = certBags[forge.pki.oids.certBag]?.[0];
     const x509 = certBag?.cert;
 
-    if (!x509) throw new BadRequestException('Certificado não encontrado no arquivo .pfx');
+    if (!x509)
+      throw new BadRequestException(
+        'Certificado não encontrado no arquivo .pfx',
+      );
 
     const validFrom = x509.validity.notBefore;
     const validTo = x509.validity.notAfter;
@@ -176,7 +190,10 @@ export class CertificatesService {
   private encrypt(text: string): string {
     const iv = randomBytes(16);
     const cipher = createCipheriv(ALGORITHM, KEY, iv);
-    const encrypted = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
+    const encrypted = Buffer.concat([
+      cipher.update(text, 'utf8'),
+      cipher.final(),
+    ]);
     return `${iv.toString('hex')}:${encrypted.toString('hex')}`;
   }
 
@@ -185,10 +202,17 @@ export class CertificatesService {
     const iv = Buffer.from(ivHex, 'hex');
     const encrypted = Buffer.from(encryptedHex, 'hex');
     const decipher = createDecipheriv(ALGORITHM, KEY, iv);
-    return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
+    return Buffer.concat([
+      decipher.update(encrypted),
+      decipher.final(),
+    ]).toString('utf8');
   }
 
-  private async ensureAccess(teamId: string, companyId: string, userId: string) {
+  private async ensureAccess(
+    teamId: string,
+    companyId: string,
+    userId: string,
+  ) {
     const member = await this.prisma.teamMember.findUnique({
       where: { teamId_userId: { teamId, userId }, isActive: true },
     });

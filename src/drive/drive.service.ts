@@ -1,4 +1,10 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { PrismaService } from '../database/index.js';
 import { StorageService } from '../storage/storage.service.js';
 import { CreateFolderDto } from './dto/create-folder.dto.js';
@@ -35,14 +41,19 @@ export class DriveService {
       where: {
         teamId,
         isActive: true,
-        path: { startsWith: normalizedPath === '/' ? '/' : normalizedPath + '/' },
+        path: {
+          startsWith: normalizedPath === '/' ? '/' : normalizedPath + '/',
+        },
       },
       orderBy: [{ isDirectory: 'desc' }, { name: 'asc' }],
     });
 
     // Filtrar apenas itens do nível atual (filhos diretos)
     const directChildren = items.filter((item) => {
-      const relativePath = normalizedPath === '/' ? item.path : item.path.replace(normalizedPath, '');
+      const relativePath =
+        normalizedPath === '/'
+          ? item.path
+          : item.path.replace(normalizedPath, '');
       const parts = relativePath.split('/').filter(Boolean);
       return parts.length === 1;
     });
@@ -56,14 +67,18 @@ export class DriveService {
     await this.ensureTeamMember(teamId, userId);
 
     const parentPath = this.normalizePath(dto.path || '/');
-    const fullPath = parentPath === '/' ? `/${dto.name}` : `${parentPath}/${dto.name}`;
+    const fullPath =
+      parentPath === '/' ? `/${dto.name}` : `${parentPath}/${dto.name}`;
 
     // Verificar se já existe
     const existing = await this.prisma.driveItem.findUnique({
       where: { teamId_path: { teamId, path: fullPath } },
     });
 
-    if (existing) throw new ConflictException('Já existe uma pasta com esse nome neste local');
+    if (existing)
+      throw new ConflictException(
+        'Já existe uma pasta com esse nome neste local',
+      );
 
     // Verificar se o pai existe (se não for raiz)
     if (parentPath !== '/') {
@@ -88,21 +103,30 @@ export class DriveService {
 
   // ─── Staff: Upload de arquivo ───────────────────────────────────────────────
 
-  async uploadFile(teamId: string, userId: string, dto: CreateFileDto, file: Express.Multer.File) {
+  async uploadFile(
+    teamId: string,
+    userId: string,
+    dto: CreateFileDto,
+    file: Express.Multer.File,
+  ) {
     await this.ensureTeamMember(teamId, userId);
 
     if (!file) throw new BadRequestException('Arquivo é obrigatório');
 
     const parentPath = this.normalizePath(dto.path || '/');
     const fileName = dto.name || file.originalname;
-    const fullPath = parentPath === '/' ? `/${fileName}` : `${parentPath}/${fileName}`;
+    const fullPath =
+      parentPath === '/' ? `/${fileName}` : `${parentPath}/${fileName}`;
 
     // Verificar se já existe
     const existing = await this.prisma.driveItem.findUnique({
       where: { teamId_path: { teamId, path: fullPath } },
     });
 
-    if (existing) throw new ConflictException('Já existe um arquivo com esse nome neste local');
+    if (existing)
+      throw new ConflictException(
+        'Já existe um arquivo com esse nome neste local',
+      );
 
     // Verificar se o pai existe (se não for raiz)
     if (parentPath !== '/') {
@@ -134,7 +158,12 @@ export class DriveService {
 
   // ─── Staff: Atualizar item (renomear/mover) ─────────────────────────────────
 
-  async updateItem(teamId: string, itemId: string, userId: string, dto: UpdateItemDto) {
+  async updateItem(
+    teamId: string,
+    itemId: string,
+    userId: string,
+    dto: UpdateItemDto,
+  ) {
     await this.ensureTeamMember(teamId, userId);
 
     const item = await this.prisma.driveItem.findFirst({
@@ -162,7 +191,10 @@ export class DriveService {
           where: { teamId_path: { teamId, path: newPath } },
         });
 
-        if (existing) throw new ConflictException('Já existe um item com esse nome no destino');
+        if (existing)
+          throw new ConflictException(
+            'Já existe um item com esse nome no destino',
+          );
 
         // Se for pasta, atualizar todos os filhos também
         if (item.isDirectory) {
@@ -179,7 +211,11 @@ export class DriveService {
 
           // Buscar e atualizar cada filho
           const children = await this.prisma.driveItem.findMany({
-            where: { teamId, path: { startsWith: item.path + '/' }, isActive: true },
+            where: {
+              teamId,
+              path: { startsWith: item.path + '/' },
+              isActive: true,
+            },
           });
 
           for (const child of children) {
@@ -221,7 +257,11 @@ export class DriveService {
     // Se for pasta, deletar tudo dentro
     if (item.isDirectory) {
       const children = await this.prisma.driveItem.findMany({
-        where: { teamId, path: { startsWith: item.path + '/' }, isActive: true },
+        where: {
+          teamId,
+          path: { startsWith: item.path + '/' },
+          isActive: true,
+        },
       });
 
       // Deletar arquivos do storage
@@ -249,7 +289,12 @@ export class DriveService {
 
   // ─── Staff: Compartilhar com empresa ────────────────────────────────────────
 
-  async shareItem(teamId: string, itemId: string, userId: string, dto: ShareItemDto) {
+  async shareItem(
+    teamId: string,
+    itemId: string,
+    userId: string,
+    dto: ShareItemDto,
+  ) {
     await this.ensureTeamMember(teamId, userId);
 
     const item = await this.prisma.driveItem.findFirst({
@@ -267,7 +312,12 @@ export class DriveService {
 
     // Criar ou atualizar compartilhamento
     return this.prisma.driveItemShare.upsert({
-      where: { driveItemId_companyId: { driveItemId: itemId, companyId: dto.companyId } },
+      where: {
+        driveItemId_companyId: {
+          driveItemId: itemId,
+          companyId: dto.companyId,
+        },
+      },
       create: {
         driveItemId: itemId,
         companyId: dto.companyId,
@@ -280,7 +330,12 @@ export class DriveService {
     });
   }
 
-  async removeShare(teamId: string, itemId: string, companyId: string, userId: string) {
+  async removeShare(
+    teamId: string,
+    itemId: string,
+    companyId: string,
+    userId: string,
+  ) {
     await this.ensureTeamMember(teamId, userId);
 
     const item = await this.prisma.driveItem.findFirst({
@@ -317,7 +372,11 @@ export class DriveService {
 
   // ─── Staff: Listar itens compartilhados com uma empresa ──────────────────────
 
-  async findSharedWithCompany(teamId: string, companyId: string, userId: string) {
+  async findSharedWithCompany(
+    teamId: string,
+    companyId: string,
+    userId: string,
+  ) {
     await this.ensureAccess(teamId, companyId, userId);
 
     // Buscar todos os shares da empresa
@@ -346,7 +405,11 @@ export class DriveService {
     return items.map(this.formatItem);
   }
 
-  private async ensureAccess(teamId: string, companyId: string, userId: string) {
+  private async ensureAccess(
+    teamId: string,
+    companyId: string,
+    userId: string,
+  ) {
     const member = await this.prisma.teamMember.findUnique({
       where: { teamId_userId: { teamId, userId }, isActive: true },
     });
@@ -395,11 +458,19 @@ export class DriveService {
 
     // Retornar apenas as pastas raiz compartilhadas (não os filhos diretos na raiz)
     return items
-      .filter((item) => sharedPaths.some((sp) => item.path === sp || item.path.startsWith(sp + '/')))
+      .filter((item) =>
+        sharedPaths.some(
+          (sp) => item.path === sp || item.path.startsWith(sp + '/'),
+        ),
+      )
       .map(this.formatItem);
   }
 
-  async findByPathForClient(companyId: string, companyUserId: string, path: string) {
+  async findByPathForClient(
+    companyId: string,
+    companyUserId: string,
+    path: string,
+  ) {
     await this.ensureCompanyUser(companyId, companyUserId);
 
     const company = await this.prisma.company.findUnique({
@@ -412,21 +483,30 @@ export class DriveService {
     const normalizedPath = this.normalizePath(path);
 
     // Verificar se o path está compartilhado (ou algum ancestral)
-    const isShared = await this.isPathSharedWithCompany(normalizedPath, companyId, company.teamId);
+    const isShared = await this.isPathSharedWithCompany(
+      normalizedPath,
+      companyId,
+      company.teamId,
+    );
     if (!isShared) throw new ForbiddenException('Pasta não compartilhada');
 
     const items = await this.prisma.driveItem.findMany({
       where: {
         teamId: company.teamId,
         isActive: true,
-        path: { startsWith: normalizedPath === '/' ? '/' : normalizedPath + '/' },
+        path: {
+          startsWith: normalizedPath === '/' ? '/' : normalizedPath + '/',
+        },
       },
       orderBy: [{ isDirectory: 'desc' }, { name: 'asc' }],
     });
 
     // Filtrar apenas itens do nível atual
     const directChildren = items.filter((item) => {
-      const relativePath = normalizedPath === '/' ? item.path : item.path.replace(normalizedPath, '');
+      const relativePath =
+        normalizedPath === '/'
+          ? item.path
+          : item.path.replace(normalizedPath, '');
       const parts = relativePath.split('/').filter(Boolean);
       return parts.length === 1;
     });
@@ -455,20 +535,34 @@ export class DriveService {
     const normalizedPath = this.normalizePath(path);
 
     // Verificar se pode fazer upload nesse path
-    const canUpload = await this.canClientUploadToPath(normalizedPath, companyId, company.teamId);
-    if (!canUpload) throw new ForbiddenException('Você não tem permissão para enviar arquivos nesta pasta');
+    const canUpload = await this.canClientUploadToPath(
+      normalizedPath,
+      companyId,
+      company.teamId,
+    );
+    if (!canUpload)
+      throw new ForbiddenException(
+        'Você não tem permissão para enviar arquivos nesta pasta',
+      );
 
     const fileName = name || file.originalname;
-    const fullPath = normalizedPath === '/' ? `/${fileName}` : `${normalizedPath}/${fileName}`;
+    const fullPath =
+      normalizedPath === '/' ? `/${fileName}` : `${normalizedPath}/${fileName}`;
 
     // Verificar se já existe
     const existing = await this.prisma.driveItem.findUnique({
       where: { teamId_path: { teamId: company.teamId, path: fullPath } },
     });
 
-    if (existing) throw new ConflictException('Já existe um arquivo com esse nome neste local');
+    if (existing)
+      throw new ConflictException(
+        'Já existe um arquivo com esse nome neste local',
+      );
 
-    const fileUrl = await this.storage.upload(file, `teams/${company.teamId}/drive`);
+    const fileUrl = await this.storage.upload(
+      file,
+      `teams/${company.teamId}/drive`,
+    );
 
     const driveItem = await this.prisma.driveItem.create({
       data: {
@@ -487,7 +581,11 @@ export class DriveService {
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
 
-  private async isPathSharedWithCompany(path: string, companyId: string, teamId: string): Promise<boolean> {
+  private async isPathSharedWithCompany(
+    path: string,
+    companyId: string,
+    teamId: string,
+  ): Promise<boolean> {
     const pathParts = path.split('/').filter(Boolean);
     let currentPath = '';
 
@@ -504,7 +602,11 @@ export class DriveService {
     return false;
   }
 
-  private async canClientUploadToPath(path: string, companyId: string, teamId: string): Promise<boolean> {
+  private async canClientUploadToPath(
+    path: string,
+    companyId: string,
+    teamId: string,
+  ): Promise<boolean> {
     const pathParts = path.split('/').filter(Boolean);
     let currentPath = '';
 

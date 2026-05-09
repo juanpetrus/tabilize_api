@@ -27,7 +27,11 @@ export class TeamsService {
           },
         },
       },
-      include: { members: { include: { user: { select: { id: true, name: true, email: true } } } } },
+      include: {
+        members: {
+          include: { user: { select: { id: true, name: true, email: true } } },
+        },
+      },
     });
 
     return team;
@@ -77,7 +81,11 @@ export class TeamsService {
     return team;
   }
 
-  async inviteMember(teamId: string, requesterId: string, dto: InviteMemberDto) {
+  async inviteMember(
+    teamId: string,
+    requesterId: string,
+    dto: InviteMemberDto,
+  ) {
     await this.ensureAdminOrOwner(teamId, requesterId);
 
     let user = await this.prisma.user.findUnique({
@@ -102,16 +110,21 @@ export class TeamsService {
       throw new ConflictException('Usuário já é membro dessa equipe');
     }
 
-    const member = existing && !existing.isActive
-      ? await this.prisma.teamMember.update({
-          where: { id: existing.id },
-          data: { isActive: true, role: dto.role },
-          include: { user: { select: { id: true, name: true, email: true } } },
-        })
-      : await this.prisma.teamMember.create({
-          data: { teamId, userId: user.id, role: dto.role },
-          include: { user: { select: { id: true, name: true, email: true } } },
-        });
+    const member =
+      existing && !existing.isActive
+        ? await this.prisma.teamMember.update({
+            where: { id: existing.id },
+            data: { isActive: true, role: dto.role },
+            include: {
+              user: { select: { id: true, name: true, email: true } },
+            },
+          })
+        : await this.prisma.teamMember.create({
+            data: { teamId, userId: user.id, role: dto.role },
+            include: {
+              user: { select: { id: true, name: true, email: true } },
+            },
+          });
 
     return { ...member, ...(tempPassword ? { tempPassword } : {}) };
   }
@@ -125,7 +138,9 @@ export class TeamsService {
     await this.ensureAdminOrOwner(teamId, requesterId);
 
     if (dto.role === TeamRole.OWNER) {
-      throw new ForbiddenException('Não é possível atribuir o papel OWNER diretamente');
+      throw new ForbiddenException(
+        'Não é possível atribuir o papel OWNER diretamente',
+      );
     }
 
     const member = await this.prisma.teamMember.findFirst({
@@ -137,7 +152,9 @@ export class TeamsService {
     }
 
     if (member.role === TeamRole.OWNER) {
-      throw new ForbiddenException('Não é possível alterar o papel do dono da equipe');
+      throw new ForbiddenException(
+        'Não é possível alterar o papel do dono da equipe',
+      );
     }
 
     return this.prisma.teamMember.update({
@@ -173,7 +190,10 @@ export class TeamsService {
       where: { id: teamId, ownerId: userId, isActive: true },
     });
 
-    if (!team) throw new ForbiddenException('Apenas o dono pode alterar o nome do escritório');
+    if (!team)
+      throw new ForbiddenException(
+        'Apenas o dono pode alterar o nome do escritório',
+      );
 
     return this.prisma.team.update({
       where: { id: teamId },
@@ -187,8 +207,13 @@ export class TeamsService {
       where: { teamId_userId: { teamId, userId }, isActive: true },
     });
 
-    if (!member || (member.role !== TeamRole.OWNER && member.role !== TeamRole.ADMIN)) {
-      throw new ForbiddenException('Acesso negado: você precisa ser OWNER ou ADMIN');
+    if (
+      !member ||
+      (member.role !== TeamRole.OWNER && member.role !== TeamRole.ADMIN)
+    ) {
+      throw new ForbiddenException(
+        'Acesso negado: você precisa ser OWNER ou ADMIN',
+      );
     }
 
     return member;

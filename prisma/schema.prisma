@@ -56,6 +56,23 @@ enum RecurrenceInterval {
   YEARLY
 }
 
+enum CndType {
+  FEDERAL        // CND Federal (Receita/PGFN)
+  ESTADUAL       // CND Estadual (SEFAZ)
+  MUNICIPAL      // CND Municipal (Prefeitura)
+  FGTS           // CRF FGTS (Caixa)
+  TRABALHISTA    // CNDT (TST)
+}
+
+enum CndStatus {
+  VALID          // Certidão válida (negativa)
+  EXPIRED        // Certidão vencida
+  PENDING        // Aguardando consulta
+  POSITIVE       // Certidão positiva (com débitos)
+  POSITIVE_NEGATIVE // Certidão positiva com efeito de negativa
+  ERROR          // Erro na consulta
+}
+
 enum BillingCycle {
   MONTH
   YEAR
@@ -166,6 +183,7 @@ model Company {
   certificate        CompanyCertificate?
   sefazNFes          SefazNFe[]
   sefazEventos       SefazEvento[]
+  cnds               Cnd[]                // Certidões negativas
 }
 
 // ─── Portal cliente (login da empresa) ───────────────────────────────────────
@@ -407,5 +425,39 @@ model Payment {
   updatedAt           DateTime            @updatedAt
 
   company Company @relation(fields: [companyId], references: [id])
+}
+
+// ─── Certidões Negativas de Débitos ──────────────────────────────────────────
+
+model Cnd {
+  id             String    @id @default(uuid())
+  companyId      String
+  type           CndType
+  status         CndStatus @default(PENDING)
+
+  // Dados da certidão
+  issueDate      DateTime?          // Data de emissão
+  expirationDate DateTime?          // Data de validade
+  protocolNumber String?            // Número do protocolo/certidão
+
+  // Arquivo para download
+  fileUrl        String?            // URL do PDF no S3
+  fileName       String?            // Nome original do arquivo
+
+  // Controle de sincronização
+  autoSync       Boolean   @default(true)  // Sincronizar automaticamente
+  lastSyncAt     DateTime?                 // Última tentativa de sync
+  lastError      String?                   // Último erro de sync
+
+  // Metadados
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@unique([companyId, type])  // Uma certidão de cada tipo por empresa
+  @@index([companyId])
+  @@index([expirationDate])    // Para alertas de vencimento
 }
 

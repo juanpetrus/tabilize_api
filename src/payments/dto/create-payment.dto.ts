@@ -1,4 +1,13 @@
-import { IsString, IsNotEmpty, IsNumber, IsDateString, IsOptional, IsBoolean, IsEnum, Min } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsNumber,
+  IsDateString,
+  IsOptional,
+  IsBoolean,
+  IsEnum,
+  Min,
+} from 'class-validator';
 import { RecurrenceInterval } from '../../../generated/prisma/enums.js';
 
 export class CreatePaymentDto {

@@ -18,7 +18,9 @@ export class CompaniesService {
     await this.ensureTeamMember(teamId, userId);
 
     if (dto.cnpj) {
-      const existing = await this.prisma.company.findUnique({ where: { cnpj: dto.cnpj } });
+      const existing = await this.prisma.company.findUnique({
+        where: { cnpj: dto.cnpj },
+      });
       if (existing) throw new ConflictException('CNPJ já cadastrado');
     }
 
@@ -33,7 +35,9 @@ export class CompaniesService {
     return this.prisma.company.findMany({
       where: { teamId, isActive: true },
       include: {
-        _count: { select: { tasks: true, driveShares: true, serviceRequests: true } },
+        _count: {
+          select: { tasks: true, driveShares: true, serviceRequests: true },
+        },
       },
       orderBy: { name: 'asc' },
     });
@@ -45,7 +49,9 @@ export class CompaniesService {
     const company = await this.prisma.company.findFirst({
       where: { id: companyId, teamId, isActive: true },
       include: {
-        _count: { select: { tasks: true, driveShares: true, serviceRequests: true } },
+        _count: {
+          select: { tasks: true, driveShares: true, serviceRequests: true },
+        },
         companyUsers: {
           where: { isActive: true },
           select: { id: true, name: true, email: true, createdAt: true },
@@ -58,7 +64,12 @@ export class CompaniesService {
     return company;
   }
 
-  async update(teamId: string, companyId: string, userId: string, dto: UpdateCompanyDto) {
+  async update(
+    teamId: string,
+    companyId: string,
+    userId: string,
+    dto: UpdateCompanyDto,
+  ) {
     await this.ensureTeamMember(teamId, userId);
 
     const company = await this.prisma.company.findFirst({
@@ -68,7 +79,9 @@ export class CompaniesService {
     if (!company) throw new NotFoundException('Empresa não encontrada');
 
     if (dto.cnpj && dto.cnpj !== company.cnpj) {
-      const cnpjTaken = await this.prisma.company.findUnique({ where: { cnpj: dto.cnpj } });
+      const cnpjTaken = await this.prisma.company.findUnique({
+        where: { cnpj: dto.cnpj },
+      });
       if (cnpjTaken) throw new ConflictException('CNPJ já cadastrado');
     }
 
@@ -132,7 +145,9 @@ export class CompaniesService {
       }
 
       if (cnpj) {
-        const existing = await this.prisma.company.findUnique({ where: { cnpj } });
+        const existing = await this.prisma.company.findUnique({
+          where: { cnpj },
+        });
         if (existing) {
           skipped.push({ row: i + 2, name, reason: 'CNPJ já cadastrado' });
           continue;

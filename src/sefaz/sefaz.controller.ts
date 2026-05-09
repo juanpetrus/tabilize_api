@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import { Response } from 'express';
 import { SefazService } from './sefaz.service.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
@@ -37,7 +47,11 @@ export class SefazController {
     @Query('limit') limit?: string,
   ) {
     return this.sefazService.listNFes(teamId, companyId, req.user.id, {
-      tipo, status, modelo, dataInicio, dataFim,
+      tipo,
+      status,
+      modelo,
+      dataInicio,
+      dataFim,
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
     });
@@ -51,7 +65,12 @@ export class SefazController {
     @Req() req: AuthRequest,
     @Body('chave') chave: string,
   ) {
-    return this.sefazService.buscarNFePorChave(teamId, companyId, req.user.id, chave);
+    return this.sefazService.buscarNFePorChave(
+      teamId,
+      companyId,
+      req.user.id,
+      chave,
+    );
   }
 
   // Detalhe de uma NF-e com histórico de eventos
@@ -74,7 +93,13 @@ export class SefazController {
     @Req() req: AuthRequest,
     @Query('force') force?: string,
   ) {
-    return this.sefazService.consultarNFe(teamId, companyId, req.user.id, nfeId, force === 'true');
+    return this.sefazService.consultarNFe(
+      teamId,
+      companyId,
+      req.user.id,
+      nfeId,
+      force === 'true',
+    );
   }
 
   // Manifestação do destinatário
@@ -84,10 +109,18 @@ export class SefazController {
     @Param('companyId') companyId: string,
     @Param('nfeId') nfeId: string,
     @Req() req: AuthRequest,
-    @Body('tipo') tipo: 'CIENCIA' | 'CONFIRMADA' | 'DESCONHECIMENTO' | 'NAO_REALIZADA',
+    @Body('tipo')
+    tipo: 'CIENCIA' | 'CONFIRMADA' | 'DESCONHECIMENTO' | 'NAO_REALIZADA',
     @Body('justificativa') justificativa?: string,
   ) {
-    return this.sefazService.manifestar(teamId, companyId, req.user.id, nfeId, tipo, justificativa);
+    return this.sefazService.manifestar(
+      teamId,
+      companyId,
+      req.user.id,
+      nfeId,
+      tipo,
+      justificativa,
+    );
   }
 
   // XML completo da NF-e
@@ -110,9 +143,17 @@ export class SefazController {
     @Req() req: AuthRequest,
     @Res() res: Response,
   ) {
-    const pdf = await this.sefazService.getDanfe(teamId, companyId, req.user.id, nfeId);
+    const pdf = await this.sefazService.getDanfe(
+      teamId,
+      companyId,
+      req.user.id,
+      nfeId,
+    );
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="danfe-${nfeId}.pdf"`);
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="danfe-${nfeId}.pdf"`,
+    );
     res.send(pdf);
   }
 }

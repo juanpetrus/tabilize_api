@@ -1,4 +1,16 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Req,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CompaniesService } from './companies.service.js';
 import { CreateCompanyDto } from './dto/create-company.dto.js';
@@ -33,10 +45,7 @@ export class CompaniesController {
    * Declarado antes de `:companyId` para não ser capturado pela rota dinâmica.
    */
   @Get('portal-users')
-  listAllPortalUsers(
-    @Param('teamId') teamId: string,
-    @Req() req: AuthRequest,
-  ) {
+  listAllPortalUsers(@Param('teamId') teamId: string, @Req() req: AuthRequest) {
     return this.companiesService.listAllPortalUsers(teamId, req.user.id);
   }
 
@@ -89,7 +98,11 @@ export class CompaniesController {
     @Param('companyId') companyId: string,
     @Req() req: AuthRequest,
   ) {
-    return this.companiesService.listCompanyUsers(teamId, companyId, req.user.id);
+    return this.companiesService.listCompanyUsers(
+      teamId,
+      companyId,
+      req.user.id,
+    );
   }
 
   /**
