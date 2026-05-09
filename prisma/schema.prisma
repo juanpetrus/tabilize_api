@@ -78,6 +78,34 @@ enum BillingCycle {
   YEAR
 }
 
+enum EmployeeStatus {
+  ACTIVE           // Ativo
+  DISMISSED        // Demitido
+  ON_LEAVE         // Afastado (licença, férias, etc)
+  VACATION         // Férias
+}
+
+enum ContractType {
+  CLT              // Consolidação das Leis do Trabalho
+  PJ               // Pessoa Jurídica
+  INTERN           // Estagiário
+  TEMP             // Temporário
+  APPRENTICE       // Aprendiz
+}
+
+enum DismissalType {
+  WITHOUT_CAUSE    // Sem justa causa
+  WITH_CAUSE       // Com justa causa
+  RESIGNATION      // Pedido de demissão
+  MUTUAL_AGREEMENT // Acordo mútuo (reforma trabalhista)
+  CONTRACT_END     // Término de contrato
+}
+
+enum PayslipItemType {
+  EARNING   // Vencimento/Provento
+  DEDUCTION // Desconto
+}
+
 // ─── Auth interna (contador / equipe) ────────────────────────────────────────
 
 model User {
@@ -184,6 +212,7 @@ model Company {
   sefazNFes          SefazNFe[]
   sefazEventos       SefazEvento[]
   cnds               Cnd[]                // Certidões negativas
+  employees          Employee[]           // Funcionários
 }
 
 // ─── Portal cliente (login da empresa) ───────────────────────────────────────
@@ -459,5 +488,114 @@ model Cnd {
   @@unique([companyId, type])  // Uma certidão de cada tipo por empresa
   @@index([companyId])
   @@index([expirationDate])    // Para alertas de vencimento
+}
+
+// ─── Funcionários (Folha de Pagamento) ──────────────────────────────────────
+
+model Employee {
+  id            String         @id @default(uuid())
+  companyId     String
+
+  // Dados pessoais
+  name          String
+  cpf           String
+  rg            String?
+  birthDate     DateTime?
+  email         String?
+  phone         String?
+  address       String?
+
+  // Dados trabalhistas
+  admissionDate DateTime
+  dismissalDate DateTime?
+  dismissalType DismissalType?
+  position      String                 // Cargo
+  department    String?                // Departamento/Setor
+  salary        Decimal       @db.Decimal(10, 2)
+  workCard      String?                // Número CTPS
+  pis           String?                // PIS/PASEP
+
+  // Status e tipo de contrato
+  status        EmployeeStatus @default(ACTIVE)
+  contractType  ContractType   @default(CLT)
+
+  // Metadados
+  notes         String?
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  company       Company        @relation(fields: [companyId], references: [id])
+  payslips      Payslip[]
+  documents     EmployeeDocument[]
+
+  @@unique([companyId, cpf])
+  @@index([companyId])
+  @@index([status])
+}
+
+// ─── Documentos do Funcionário ──────────────────────────────────────────────
+
+model EmployeeDocument {
+  id          String   @id @default(uuid())
+  employeeId  String
+  name        String           // Nome do documento (ex: "RG", "CPF", "Contrato")
+  fileUrl     String
+  fileName    String
+  mimeType    String?
+  uploadedAt  DateTime @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+}
+
+// ─── Holerites / Contracheques ──────────────────────────────────────────────
+
+model Payslip {
+  id              String   @id @default(uuid())
+  employeeId      String
+  competenceMonth Int              // Mês de referência (1-12)
+  competenceYear  Int              // Ano de referência
+
+  // Valores
+  grossSalary     Decimal  @db.Decimal(10, 2)  // Salário bruto
+  netSalary       Decimal  @db.Decimal(10, 2)  // Salário líquido
+  deductions      Decimal? @db.Decimal(10, 2)  // Total de descontos
+
+  // Bases de cálculo
+  baseInss        Decimal? @db.Decimal(10, 2)  // Base de cálculo INSS
+  baseIrrf        Decimal? @db.Decimal(10, 2)  // Base de cálculo IRRF
+  fgtsValue       Decimal? @db.Decimal(10, 2)  // Valor FGTS do mês
+
+  // Arquivo PDF
+  fileUrl         String
+  fileName        String
+
+  // Metadados
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  items    PayslipItem[]
+
+  @@unique([employeeId, competenceMonth, competenceYear])
+  @@index([employeeId])
+  @@index([competenceYear, competenceMonth])
+}
+
+model PayslipItem {
+  id          String          @id @default(uuid())
+  payslipId   String
+  code        String          // Código da rubrica (ex: "001", "101")
+  description String          // Descrição (ex: "Salário Base", "INSS")
+  type        PayslipItemType // EARNING ou DEDUCTION
+  reference   String?         // Referência (ex: "30 dias", "11%")
+  value       Decimal         @db.Decimal(10, 2)
+
+  payslip Payslip @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+
+  @@index([payslipId])
 }
 
