@@ -18,6 +18,7 @@ import { BillingModule } from './billing/billing.module.js';
 import { SubscriptionGuard } from './billing/subscription.guard.js';
 import { SefazModule } from './sefaz/sefaz.module.js';
 import { CndModule } from './cnd/cnd.module.js';
+import { LicensesModule } from './licenses/licenses.module.js';
 import { EmployeesModule } from './employees/employees.module.js';
 
 @Module({
@@ -37,6 +38,7 @@ import { EmployeesModule } from './employees/employees.module.js';
     BillingModule,
     SefazModule,
     CndModule,
+    LicensesModule,
     EmployeesModule,
   ],
   controllers: [AppController],

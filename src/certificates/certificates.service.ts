@@ -144,7 +144,9 @@ export class CertificatesService {
         case 'expired':
           return { certificate: { expiresAt: { lt: now } } };
         case 'expiring_soon':
-          return { certificate: { expiresAt: { gte: now, lt: soonThreshold } } };
+          return {
+            certificate: { expiresAt: { gte: now, lt: soonThreshold } },
+          };
         case 'valid':
           return { certificate: { expiresAt: { gte: soonThreshold } } };
         default:

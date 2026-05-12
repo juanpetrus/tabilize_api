@@ -73,6 +73,26 @@ enum CndStatus {
   ERROR          // Erro na consulta
 }
 
+enum LicenseType {
+  ALVARA_FUNCIONAMENTO   // Alvará / Licença de Funcionamento (Prefeitura)
+  BOMBEIROS_AVCB         // AVCB / CLCB (Corpo de Bombeiros)
+  SANITARIA              // Licença / Alvará Sanitário (Vigilância Sanitária)
+  AMBIENTAL              // Licença Ambiental (LP/LI/LO)
+  INSCRICAO_MUNICIPAL    // CCM / Inscrição Municipal (ISS)
+  INSCRICAO_ESTADUAL     // Inscrição Estadual (ICMS / SEFAZ)
+  JUNTA_COMERCIAL        // Registro na Junta Comercial / NIRE
+  CONSELHO_CLASSE        // Registro em conselho de classe (CRC, CREA, CRM, OAB...)
+  OUTRO                  // Outro tipo — usar o campo `name`
+}
+
+enum LicenseStatus {
+  PENDING     // Em processo / aguardando emissão
+  ACTIVE      // Vigente
+  EXPIRED     // Vencida
+  SUSPENDED   // Suspensa / em exigência
+  CANCELLED   // Cancelada / baixada
+}
+
 enum BillingCycle {
   MONTH
   YEAR
@@ -212,6 +232,7 @@ model Company {
   sefazNFes          SefazNFe[]
   sefazEventos       SefazEvento[]
   cnds               Cnd[]                // Certidões negativas
+  licenses           License[]            // Licenças / legalização (alvarás etc.)
   employees          Employee[]           // Funcionários
 }
 
@@ -488,6 +509,44 @@ model Cnd {
   @@unique([companyId, type])  // Uma certidão de cada tipo por empresa
   @@index([companyId])
   @@index([expirationDate])    // Para alertas de vencimento
+}
+
+// ─── Legalização: Licenças / Alvarás ─────────────────────────────────────────
+
+model License {
+  id             String        @id @default(uuid())
+  companyId      String
+  type           LicenseType
+  name           String                              // texto livre; obrigatório quando type = OUTRO
+  status         LicenseStatus @default(PENDING)
+
+  issuingBody    String?                             // órgão emissor ("Prefeitura de São Paulo", "Corpo de Bombeiros - SP")
+  number         String?                             // nº do alvará / NIRE / inscrição
+  protocolNumber String?                             // protocolo do processo
+  issueDate      DateTime?                           // data de emissão
+  expirationDate DateTime?                           // validade (null = sem validade definida — ex.: NIRE, inscrições)
+  notes          String?
+
+  // Arquivo (no R2, via StorageService)
+  fileUrl        String?
+  fileName       String?
+  mimeType       String?
+
+  // Cadeia de renovação
+  renewedFromId  String?       @unique               // a License anterior que esta renova
+  renewedFrom    License?      @relation("LicenseRenewal", fields: [renewedFromId], references: [id])
+  renewal        License?      @relation("LicenseRenewal")  // a renovação desta (se já foi renovada)
+
+  // Metadados
+  isActive       Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@index([expirationDate])    // Para alertas de vencimento
+  @@index([companyId, type])
 }
 
 // ─── Funcionários (Folha de Pagamento) ──────────────────────────────────────
