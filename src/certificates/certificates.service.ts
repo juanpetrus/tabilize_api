@@ -6,11 +6,29 @@ import {
 } from '@nestjs/common';
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 import * as forge from 'node-forge';
+import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../database/index.js';
 import { StorageService } from '../storage/storage.service.js';
 
 const ALGORITHM = 'aes-256-cbc';
 const KEY = Buffer.from(process.env['CERTIFICATE_ENCRYPTION_KEY'] ?? '', 'hex');
+
+// Janela (em dias) para considerar um certificado "vencendo em breve"
+const EXPIRING_SOON_DAYS = 30;
+
+export type CertificateStatus =
+  | 'missing'
+  | 'expired'
+  | 'expiring_soon'
+  | 'valid'
+  | 'unknown';
+
+export type CertificateStatusFilter =
+  | 'with'
+  | 'without'
+  | 'expired'
+  | 'expiring_soon'
+  | 'valid';
 
 @Injectable()
 export class CertificatesService {
@@ -64,6 +82,170 @@ export class CertificatesService {
 
     // Valida e extrai informações do certificado (atualiza expiresAt automaticamente)
     return this.parseCertificate(file.buffer, password, companyId);
+  }
+
+  /**
+   * Visão geral de certificados da equipe (paginada): lista as empresas e
+   * indica se possuem certificado e o status (válido / vencendo / vencido / sem).
+   * Usada na tela de gestão de certificados.
+   *
+   * `counts` reflete TODAS as empresas que batem com `search` (ignora `status`),
+   * para montar os filtros com contagem. `pagination.total` é o total já
+   * filtrado por `search` + `status`.
+   */
+  async listForTeam(
+    teamId: string,
+    userId: string,
+    options: {
+      search?: string;
+      status?: CertificateStatusFilter;
+      page?: number;
+      pageSize?: number;
+    } = {},
+  ) {
+    await this.ensureTeamMember(teamId, userId);
+
+    const search = options.search?.trim();
+    const page =
+      Number.isFinite(options.page) && (options.page as number) > 0
+        ? Math.trunc(options.page as number)
+        : 1;
+    const pageSize =
+      Number.isFinite(options.pageSize) && (options.pageSize as number) > 0
+        ? Math.min(100, Math.trunc(options.pageSize as number))
+        : 20;
+
+    const now = new Date();
+    const soonThreshold = new Date(
+      now.getTime() + EXPIRING_SOON_DAYS * 24 * 60 * 60 * 1000,
+    );
+
+    const baseWhere: Prisma.CompanyWhereInput = {
+      teamId,
+      isActive: true,
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: 'insensitive' } },
+              { cnpj: { contains: search } },
+            ],
+          }
+        : {}),
+    };
+
+    const statusWhere = (
+      status?: CertificateStatusFilter,
+    ): Prisma.CompanyWhereInput => {
+      switch (status) {
+        case 'with':
+          return { certificate: { isNot: null } };
+        case 'without':
+          return { certificate: { is: null } };
+        case 'expired':
+          return { certificate: { expiresAt: { lt: now } } };
+        case 'expiring_soon':
+          return { certificate: { expiresAt: { gte: now, lt: soonThreshold } } };
+        case 'valid':
+          return { certificate: { expiresAt: { gte: soonThreshold } } };
+        default:
+          return {};
+      }
+    };
+
+    const where: Prisma.CompanyWhereInput = {
+      AND: [baseWhere, statusWhere(options.status)],
+    };
+
+    const [
+      total,
+      grandTotal,
+      withCertificate,
+      expired,
+      expiringSoon,
+      valid,
+      rows,
+    ] = await Promise.all([
+      this.prisma.company.count({ where }),
+      this.prisma.company.count({ where: baseWhere }),
+      this.prisma.company.count({
+        where: { AND: [baseWhere, statusWhere('with')] },
+      }),
+      this.prisma.company.count({
+        where: { AND: [baseWhere, statusWhere('expired')] },
+      }),
+      this.prisma.company.count({
+        where: { AND: [baseWhere, statusWhere('expiring_soon')] },
+      }),
+      this.prisma.company.count({
+        where: { AND: [baseWhere, statusWhere('valid')] },
+      }),
+      this.prisma.company.findMany({
+        where,
+        select: {
+          id: true,
+          name: true,
+          cnpj: true,
+          certificate: {
+            select: {
+              id: true,
+              expiresAt: true,
+              isActive: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          },
+        },
+        orderBy: { name: 'asc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+
+    const items = rows.map((c) => {
+      const cert = c.certificate;
+      let status: CertificateStatus;
+      if (!cert) status = 'missing';
+      else if (!cert.expiresAt) status = 'unknown';
+      else if (cert.expiresAt < now) status = 'expired';
+      else if (cert.expiresAt < soonThreshold) status = 'expiring_soon';
+      else status = 'valid';
+
+      return {
+        companyId: c.id,
+        companyName: c.name,
+        cnpj: c.cnpj,
+        hasCertificate: !!cert,
+        status,
+        certificate: cert
+          ? {
+              id: cert.id,
+              expiresAt: cert.expiresAt,
+              isActive: cert.isActive,
+              createdAt: cert.createdAt,
+              updatedAt: cert.updatedAt,
+            }
+          : null,
+      };
+    });
+
+    return {
+      items,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      },
+      counts: {
+        total: grandTotal,
+        withCertificate,
+        withoutCertificate: grandTotal - withCertificate,
+        valid,
+        expiringSoon,
+        expired,
+        unknown: withCertificate - valid - expiringSoon - expired,
+      },
+    };
   }
 
   async findOne(teamId: string, companyId: string, userId: string) {
@@ -208,15 +390,19 @@ export class CertificatesService {
     ]).toString('utf8');
   }
 
+  private async ensureTeamMember(teamId: string, userId: string) {
+    const member = await this.prisma.teamMember.findUnique({
+      where: { teamId_userId: { teamId, userId }, isActive: true },
+    });
+    if (!member) throw new ForbiddenException('Você não é membro dessa equipe');
+  }
+
   private async ensureAccess(
     teamId: string,
     companyId: string,
     userId: string,
   ) {
-    const member = await this.prisma.teamMember.findUnique({
-      where: { teamId_userId: { teamId, userId }, isActive: true },
-    });
-    if (!member) throw new ForbiddenException('Você não é membro dessa equipe');
+    await this.ensureTeamMember(teamId, userId);
 
     const company = await this.prisma.company.findFirst({
       where: { id: companyId, teamId, isActive: true },
