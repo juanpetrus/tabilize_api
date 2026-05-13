@@ -6,6 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { parse } from 'csv-parse/sync';
+import { Prisma } from '../../generated/prisma/client.js';
 import { PrismaService } from '../database/index.js';
 import { CreateCompanyDto } from './dto/create-company.dto.js';
 import { UpdateCompanyDto } from './dto/update-company.dto.js';
@@ -29,18 +30,60 @@ export class CompaniesService {
     });
   }
 
-  async findAll(teamId: string, userId: string) {
+  async findAll(
+    teamId: string,
+    userId: string,
+    options: { search?: string; page?: number; pageSize?: number } = {},
+  ) {
     await this.ensureTeamMember(teamId, userId);
 
-    return this.prisma.company.findMany({
-      where: { teamId, isActive: true },
-      include: {
-        _count: {
-          select: { tasks: true, driveShares: true, serviceRequests: true },
+    const search = options.search?.trim();
+    const page =
+      Number.isFinite(options.page) && (options.page as number) > 0
+        ? Math.trunc(options.page as number)
+        : 1;
+    const pageSize =
+      Number.isFinite(options.pageSize) && (options.pageSize as number) > 0
+        ? Math.min(100, Math.trunc(options.pageSize as number))
+        : 20;
+
+    const where: Prisma.CompanyWhereInput = {
+      teamId,
+      isActive: true,
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: 'insensitive' } },
+              { cnpj: { contains: search } },
+            ],
+          }
+        : {}),
+    };
+
+    const [total, items] = await Promise.all([
+      this.prisma.company.count({ where }),
+      this.prisma.company.findMany({
+        where,
+        include: {
+          _count: {
+            select: { tasks: true, driveShares: true, serviceRequests: true },
+          },
         },
+        orderBy: { name: 'asc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+
+    return {
+      items,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
       },
-      orderBy: { name: 'asc' },
-    });
+    };
   }
 
   async findOne(teamId: string, companyId: string, userId: string) {

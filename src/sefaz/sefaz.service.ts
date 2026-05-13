@@ -187,6 +187,69 @@ export class SefazService {
     return { total, page, limit, nfes };
   }
 
+  // Visão geral por equipe: lista empresas com a última sincronização da SEFAZ
+  async listForTeam(
+    teamId: string,
+    userId: string,
+    options: { search?: string; page?: number; pageSize?: number } = {},
+  ) {
+    const member = await this.prisma.teamMember.findUnique({
+      where: { teamId_userId: { teamId, userId }, isActive: true },
+    });
+    if (!member)
+      throw new BadRequestException('Você não é membro dessa equipe');
+
+    const search = options.search?.trim();
+    const page =
+      Number.isFinite(options.page) && (options.page as number) > 0
+        ? Math.trunc(options.page as number)
+        : 1;
+    const pageSize =
+      Number.isFinite(options.pageSize) && (options.pageSize as number) > 0
+        ? Math.min(100, Math.trunc(options.pageSize as number))
+        : 20;
+
+    const where = {
+      teamId,
+      isActive: true,
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: 'insensitive' as const } },
+              { cnpj: { contains: search } },
+            ],
+          }
+        : {}),
+    };
+
+    const [total, items] = await Promise.all([
+      this.prisma.company.count({ where }),
+      this.prisma.company.findMany({
+        where,
+        select: {
+          id: true,
+          name: true,
+          cnpj: true,
+          sefazLastSync: true,
+          sefazUltNsu: true,
+        },
+        orderBy: { name: 'asc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+
+    return {
+      items,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      },
+    };
+  }
+
   async getNFe(
     teamId: string,
     companyId: string,

@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UploadedFile,
   UseGuards,
@@ -36,8 +37,18 @@ export class CompaniesController {
   }
 
   @Get()
-  findAll(@Param('teamId') teamId: string, @Req() req: AuthRequest) {
-    return this.companiesService.findAll(teamId, req.user.id);
+  findAll(
+    @Param('teamId') teamId: string,
+    @Req() req: AuthRequest,
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    return this.companiesService.findAll(teamId, req.user.id, {
+      search,
+      page: page ? parseInt(page, 10) : undefined,
+      pageSize: pageSize ? parseInt(pageSize, 10) : undefined,
+    });
   }
 
   /**
