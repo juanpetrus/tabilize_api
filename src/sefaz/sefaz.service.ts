@@ -997,71 +997,110 @@ export class SefazService {
         ? [docs]
         : [];
 
-    for (const doc of documentos) {
-      const schema = doc.$?.schema ?? '';
-      const xmlGzip = doc._;
+    // Prioriza procNFe (XML completo) sobre resNFe (resumo)
+    const procDoc = documentos.find((d) =>
+      (d.$?.schema ?? '').startsWith('procNFe'),
+    );
+    const resDoc = documentos.find((d) =>
+      (d.$?.schema ?? '').startsWith('resNFe'),
+    );
+    const doc = procDoc ?? resDoc;
 
-      if (!schema.startsWith('procNFe')) continue;
+    if (!doc) {
+      return {
+        atualizado: false,
+        motivo: 'Documento não encontrado na resposta',
+      };
+    }
 
-      // Atualiza a nota com o XML completo
-      let docParsed: Record<string, unknown> = {};
-      try {
-        const compressed = Buffer.from(xmlGzip, 'base64');
-        const xmlBuffer = await gunzipAsync(compressed);
-        docParsed = await parseStringPromise(xmlBuffer.toString('utf-8'), {
-          explicitArray: false,
-        });
-      } catch {
-        /* mantém campos existentes */
-      }
+    const schema = doc.$?.schema ?? '';
+    const xmlGzip = doc._;
+    const isResumo = schema.startsWith('resNFe');
 
-      const infNFe = this.extractInfNFe(docParsed, schema);
-      const emit = infNFe?.['emit'] as Record<string, unknown>;
-      const dest = infNFe?.['dest'] as Record<string, unknown>;
-      const total = (infNFe?.['total'] as Record<string, unknown>)?.[
-        'ICMSTot'
-      ] as Record<string, unknown>;
-      const ide = infNFe?.['ide'] as Record<string, unknown>;
+    let docParsed: Record<string, unknown> = {};
+    try {
+      const compressed = Buffer.from(xmlGzip, 'base64');
+      const xmlBuffer = await gunzipAsync(compressed);
+      docParsed = await parseStringPromise(xmlBuffer.toString('utf-8'), {
+        explicitArray: false,
+      });
+    } catch {
+      /* mantém campos existentes */
+    }
 
-      const emitenteCnpj =
-        (emit?.['CNPJ'] as string) ?? (emit?.['CPF'] as string) ?? null;
-      const destinCnpj =
-        (dest?.['CNPJ'] as string) ?? (dest?.['CPF'] as string) ?? null;
+    const infNFe = this.extractInfNFe(docParsed, schema);
 
-      const dhEmi = (ide?.['dhEmi'] as string) ?? (ide?.['dEmi'] as string);
+    if (isResumo && infNFe) {
+      // resNFe: campos top-level descrevem a contraparte (emitente).
+      // Empresa é destinatário; tipo = RECEBIDA.
+      const emitenteCnpj = (infNFe?.['CNPJ'] as string) ?? null;
+      const emitenteNome = (infNFe?.['xNome'] as string) ?? null;
+      const vNF = infNFe?.['vNF'] as string | undefined;
+      const dhEmiRes = infNFe?.['dhEmi'] as string | undefined;
 
       await this.prisma.sefazNFe.update({
         where: { id: nfeId },
         data: {
-          xmlGzip,
-          temXmlCompleto: true,
+          xmlGzip, // guarda o resumo pra fallback futuro
+          temXmlCompleto: false,
           emitenteCnpj: emitenteCnpj ?? nfe.emitenteCnpj,
-          emitenteNome: (emit?.['xNome'] as string) ?? nfe.emitenteNome,
-          destinCnpj: destinCnpj ?? nfe.destinCnpj,
-          destinNome: (dest?.['xNome'] as string) ?? nfe.destinNome,
-          valor: total?.['vNF']
-            ? parseFloat(total['vNF'] as string)
-            : nfe.valor,
-          serie: (ide?.['serie'] as string) ?? nfe.serie,
-          numero: (ide?.['nNF'] as string) ?? nfe.numero,
-          modelo: (ide?.['mod'] as string) ?? nfe.modelo,
-          dataEmissao: dhEmi ? new Date(dhEmi) : nfe.dataEmissao,
-          tipo:
-            emitenteCnpj === cnpj
-              ? 'EMITIDA'
-              : destinCnpj === cnpj
-                ? 'RECEBIDA'
-                : nfe.tipo,
+          emitenteNome: emitenteNome ?? nfe.emitenteNome,
+          destinCnpj: nfe.destinCnpj ?? cnpj,
+          valor: vNF ? parseFloat(vNF) : nfe.valor,
+          modelo: nfe.modelo ?? '55',
+          dataEmissao: dhEmiRes ? new Date(dhEmiRes) : nfe.dataEmissao,
+          tipo: 'RECEBIDA',
         },
       });
 
-      return { atualizado: true, motivo: 'XML completo obtido e salvo' };
+      return {
+        atualizado: true,
+        motivo:
+          'Resumo atualizado. Manifeste "Confirmação da Operação" para obter o XML completo.',
+      };
     }
 
-    return {
-      atualizado: false,
-      motivo: 'Documento não encontrado na resposta',
-    };
+    // procNFe: XML completo
+    const emit = infNFe?.['emit'] as Record<string, unknown>;
+    const dest = infNFe?.['dest'] as Record<string, unknown>;
+    const total = (infNFe?.['total'] as Record<string, unknown>)?.[
+      'ICMSTot'
+    ] as Record<string, unknown>;
+    const ide = infNFe?.['ide'] as Record<string, unknown>;
+
+    const emitenteCnpj =
+      (emit?.['CNPJ'] as string) ?? (emit?.['CPF'] as string) ?? null;
+    const destinCnpj =
+      (dest?.['CNPJ'] as string) ?? (dest?.['CPF'] as string) ?? null;
+
+    const dhEmi = (ide?.['dhEmi'] as string) ?? (ide?.['dEmi'] as string);
+
+    await this.prisma.sefazNFe.update({
+      where: { id: nfeId },
+      data: {
+        xmlGzip,
+        temXmlCompleto: true,
+        emitenteCnpj: emitenteCnpj ?? nfe.emitenteCnpj,
+        emitenteNome: (emit?.['xNome'] as string) ?? nfe.emitenteNome,
+        destinCnpj: destinCnpj ?? nfe.destinCnpj,
+        destinNome: (dest?.['xNome'] as string) ?? nfe.destinNome,
+        valor: total?.['vNF']
+          ? parseFloat(total['vNF'] as string)
+          : nfe.valor,
+        serie: (ide?.['serie'] as string) ?? nfe.serie,
+        numero: (ide?.['nNF'] as string) ?? nfe.numero,
+        modelo: (ide?.['mod'] as string) ?? nfe.modelo,
+        dataEmissao: dhEmi ? new Date(dhEmi) : nfe.dataEmissao,
+        tipo:
+          emitenteCnpj === cnpj
+            ? 'EMITIDA'
+            : destinCnpj === cnpj
+              ? 'RECEBIDA'
+              : nfe.tipo,
+      },
+    });
+
+    return { atualizado: true, motivo: 'XML completo obtido e salvo' };
   }
 
   // ─── Busca NF-e na SEFAZ pela chave, cria ou atualiza no banco ──────────────
