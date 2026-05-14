@@ -20,6 +20,11 @@ import { SefazModule } from './sefaz/sefaz.module.js';
 import { CndModule } from './cnd/cnd.module.js';
 import { LicensesModule } from './licenses/licenses.module.js';
 import { EmployeesModule } from './employees/employees.module.js';
+import { CatalogsModule } from './catalogs/catalogs.module.js';
+import { FiscalConfigModule } from './fiscal-config/fiscal-config.module.js';
+import { CustomersModule } from './customers/customers.module.js';
+import { ProductsModule } from './products/products.module.js';
+import { NfeModule } from './nfe/nfe.module.js';
 
 @Module({
   imports: [
@@ -40,6 +45,11 @@ import { EmployeesModule } from './employees/employees.module.js';
     CndModule,
     LicensesModule,
     EmployeesModule,
+    CatalogsModule,
+    FiscalConfigModule,
+    CustomersModule,
+    ProductsModule,
+    NfeModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: SubscriptionGuard }],

@@ -57,6 +57,20 @@ export class SefazController {
     });
   }
 
+  // Reprocessa notas com dados incompletos (resNFe → consChNFe → XML completo)
+  @Post('nfes/reprocess-incomplete')
+  reprocessarIncompletas(
+    @Param('teamId') teamId: string,
+    @Param('companyId') companyId: string,
+    @Req() req: AuthRequest,
+  ) {
+    return this.sefazService.reprocessarIncompletas(
+      teamId,
+      companyId,
+      req.user.id,
+    );
+  }
+
   // Busca NF-e na SEFAZ pela chave, cria ou atualiza no banco
   @Post('nfes/buscar-por-chave')
   buscarNFePorChave(
@@ -99,6 +113,27 @@ export class SefazController {
       req.user.id,
       nfeId,
       force === 'true',
+    );
+  }
+
+  // Manifestação em lote (várias notas de uma vez)
+  @Post('nfes/manifestar-lote')
+  manifestarLote(
+    @Param('teamId') teamId: string,
+    @Param('companyId') companyId: string,
+    @Req() req: AuthRequest,
+    @Body()
+    dto: {
+      nfeIds: string[];
+      tipo: 'CIENCIA' | 'CONFIRMADA' | 'DESCONHECIMENTO' | 'NAO_REALIZADA';
+      justificativa?: string;
+    },
+  ) {
+    return this.sefazService.manifestarLote(
+      teamId,
+      companyId,
+      req.user.id,
+      dto,
     );
   }
 

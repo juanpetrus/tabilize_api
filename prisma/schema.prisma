@@ -126,6 +126,121 @@ enum PayslipItemType {
   DEDUCTION // Desconto
 }
 
+// ─── Fiscal: configuração de emissão por empresa ─────────────────────────────
+
+enum Crt {
+  SIMPLES_NACIONAL                   // CRT 1
+  SIMPLES_NACIONAL_EXCESSO_SUBLIMITE // CRT 2
+  REGIME_NORMAL                      // CRT 3 (Lucro Real ou Presumido)
+  MEI                                // CRT 4
+}
+
+enum RegimeEspecial {
+  SEM_REGIME
+  MICROEMPRESA               // ME
+  EMPRESA_PEQUENO_PORTE      // EPP
+  MICROEMPRESA_MUNICIPAL     // ME municipal (ISS)
+  SOCIEDADE_PROFISSIONAIS    // Sociedade uniprofissional (ISS fixo)
+  COOPERATIVA                // Regime tributário de cooperativa
+  ESTIMATIVA                 // Regime de estimativa (ICMS/ISS)
+  PRODUTOR_RURAL
+  SUBSTITUTO_TRIBUTARIO
+  OUTRO
+}
+
+enum Estabelecimento {
+  MATRIZ
+  FILIAL
+}
+
+enum IndicadorAtividade {
+  INDUSTRIAL
+  EQUIPARADO_INDUSTRIAL
+  COMERCIANTE
+  PRESTADOR_SERVICO
+  ATIVIDADE_FINANCEIRA
+  TRANSPORTE
+  COMUNICACAO
+  OUTROS
+}
+
+enum UsarCstCsosn {
+  CST
+  CSOSN
+  NAO
+}
+
+enum AmbienteSefaz {
+  PRODUCAO       // tpAmb=1
+  HOMOLOGACAO    // tpAmb=2
+}
+
+enum TipoContingencia {
+  NORMAL
+  SVC_AN         // SEFAZ Virtual de Contingência - Ambiente Nacional
+  SVC_RS         // SEFAZ Virtual de Contingência - RS
+  EPEC           // Evento Prévio de Emissão em Contingência
+  FS_IA          // Formulário de Segurança - Impressor Auxiliar
+  OFFLINE        // Contingência offline (NFC-e)
+}
+
+enum TipoPessoa {
+  PF             // Pessoa Física (CPF, 11 dígitos)
+  PJ             // Pessoa Jurídica (CNPJ, 14 dígitos)
+}
+
+enum IndicadorIeDestinatario {
+  CONTRIBUINTE_ICMS    // 1 - Contribuinte ICMS (informa IE)
+  ISENTO               // 2 - Contribuinte isento de inscrição no cadastro de contribuintes
+  NAO_CONTRIBUINTE     // 9 - Não Contribuinte (pode ou não possuir IE)
+}
+
+// Origem da mercadoria (campo `orig` na tag CST/CSOSN ICMS) — valores fixos 0-8
+enum MercadoriaOrigem {
+  NACIONAL                                  // 0 - Nacional (exceto 3, 4, 5 e 8)
+  ESTRANGEIRA_IMPORTACAO_DIRETA             // 1 - Estrangeira, importação direta (exceto 6)
+  ESTRANGEIRA_MERCADO_INTERNO               // 2 - Estrangeira, adquirida no mercado interno (exceto 7)
+  NACIONAL_CI_SUPERIOR_40                   // 3 - Nacional, conteúdo importação > 40% e ≤ 70%
+  NACIONAL_PPB                              // 4 - Nacional, produção em conformidade com PPB
+  NACIONAL_CI_INFERIOR_40                   // 5 - Nacional, conteúdo importação ≤ 40%
+  ESTRANGEIRA_IMP_DIRETA_SEM_SIMILAR        // 6 - Estrangeira, importação direta, sem similar nacional (CAMEX)
+  ESTRANGEIRA_MERCADO_INTERNO_SEM_SIMILAR   // 7 - Estrangeira, mercado interno, sem similar nacional (CAMEX)
+  NACIONAL_CI_SUPERIOR_70                   // 8 - Nacional, conteúdo importação > 70%
+}
+
+// ─── NF-e emitida — enums ──────────────────────────────────────────────────
+
+enum NfeStatus {
+  RASCUNHO        // Editável; ainda não enviada
+  PROCESSANDO     // Enviada à SEFAZ, aguardando resposta
+  AUTORIZADA      // Autorizada (cStat 100)
+  REJEITADA       // Rejeitada pela SEFAZ
+  DENEGADA        // Denegada (cStat 110)
+  CANCELADA       // Autorizada e depois cancelada por evento
+  INUTILIZADA     // Numeração inutilizada (não chegou a ser autorizada)
+}
+
+enum NfeFinalidade {
+  NORMAL          // finNFe = 1
+  COMPLEMENTAR    // finNFe = 2
+  AJUSTE          // finNFe = 3
+  DEVOLUCAO       // finNFe = 4
+}
+
+enum NfeTipoOperacao {
+  ENTRADA         // tpNF = 0
+  SAIDA           // tpNF = 1
+}
+
+enum NfeModFrete {
+  POR_CONTA_EMITENTE              // 0 (CIF)
+  POR_CONTA_DESTINATARIO          // 1 (FOB)
+  POR_CONTA_TERCEIROS             // 2
+  TRANSPORTE_PROPRIO_EMITENTE     // 3
+  TRANSPORTE_PROPRIO_DESTINATARIO // 4
+  SEM_TRANSPORTE                  // 9
+}
+
 // ─── Auth interna (contador / equipe) ────────────────────────────────────────
 
 model User {
@@ -234,6 +349,13 @@ model Company {
   cnds               Cnd[]                // Certidões negativas
   licenses           License[]            // Licenças / legalização (alvarás etc.)
   employees          Employee[]           // Funcionários
+  fiscalProfile      CompanyFiscalProfile?  // Dados fiscais (IE, IM, CRT, etc.)
+  fiscalAddress      CompanyAddress?        // Endereço fiscal estruturado
+  nfeConfig          CompanyNfeConfig?      // Configuração de emissão NF-e (modelo 55)
+  customers          Customer[]             // Clientes/destinatários
+  products           Product[]              // Produtos/serviços
+  nfes               Nfe[]                  // NF-e emitidas pela empresa
+  nfeInutilizacoes   NfeInutilizacao[]      // Inutilizações de numeração NF-e
 }
 
 // ─── Portal cliente (login da empresa) ───────────────────────────────────────
@@ -351,6 +473,13 @@ model SefazNFe {
   temXmlCompleto Boolean   @default(false)
   modelo         String?   // 55 = NF-e | 65 = NFC-e
   manifestacao   String?   // CIENCIA | CONFIRMADA | DESCONHECIMENTO | NAO_REALIZADA
+
+  // Última tentativa de consulta consChNFe — útil para diagnóstico
+  // (ex: cStat=632 indica prazo expirado p/ download do XML)
+  lastSyncAt       DateTime?
+  lastSyncCStat    String?
+  lastSyncXMotivo  String?
+
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -656,5 +785,483 @@ model PayslipItem {
   payslip Payslip @relation(fields: [payslipId], references: [id], onDelete: Cascade)
 
   @@index([payslipId])
+}
+
+// ─── Catálogo CNAE (Classificação Nacional de Atividades Econômicas) ────────
+
+model CnaeCode {
+  codigo       String   @id              // "4711-3/01" (com máscara, formato visual padrão)
+  descricao    String                    // "Comércio varejista de mercadorias..."
+
+  // hierarquia denormalizada (origem: API IBGE)
+  secao        String   @db.Char(1)      // "G"
+  secaoDesc    String                    // "Comércio; reparação de veículos..."
+  divisao      String                    // "47"
+  grupo        String                    // "471"
+  classe       String                    // "4711-3"
+
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  fiscalProfiles CompanyFiscalProfile[]
+
+  @@index([descricao])
+  @@index([secao])
+}
+
+// ─── Configuração fiscal da empresa (1:1 com Company) ──────────────────────
+
+model CompanyFiscalProfile {
+  id                   String              @id @default(uuid())
+  companyId            String              @unique
+  companyCode          String?             // Código interno do contador (ex: "534569")
+  inscricaoEstadual    String?             // IE — aceita texto "ISENTO"
+  inscricaoEstadualST  String?             // IE Substituto Tributário
+  inscricaoMunicipal   String?
+  nomeFantasia         String?
+  cnaePrincipal        String?             // FK para CnaeCode.codigo
+  crt                  Crt?                // CRT 1/2/3/4 — sem default (obrigatório explícito)
+  regimeEspecial       RegimeEspecial      @default(SEM_REGIME)
+  estabelecimento      Estabelecimento?    // MATRIZ/FILIAL — null indica pendência
+  indicadorAtividade   IndicadorAtividade? // null indica pendência
+  produtorRural        Boolean             @default(false)
+  usarCstCsosn         UsarCstCsosn        @default(NAO)
+  isActive             Boolean             @default(true)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  company              Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  cnae                 CnaeCode? @relation(fields: [cnaePrincipal], references: [codigo])
+
+  @@index([cnaePrincipal])
+}
+
+// ─── Endereço fiscal estruturado (1:1 com Company) ─────────────────────────
+
+model CompanyAddress {
+  id                 String   @id @default(uuid())
+  companyId          String   @unique
+  logradouro         String?
+  numero             String?
+  complemento        String?
+  bairro             String?
+  cep                String?  // 8 dígitos, sem máscara
+  codIbgeMunicipio   String?  // 7 dígitos — vai como cMun no XML NF-e
+  municipio          String?  // nome do município — vai como xMun
+  uf                 String?  // 2 chars — UF
+  codPais            String?  @default("1058")    // 1058 = Brasil
+  pais               String?  @default("BRASIL")
+  referencia         String?
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+// ─── Configuração NF-e modelo 55 (1:1 com Company) ─────────────────────────
+
+model CompanyNfeConfig {
+  id                          String            @id @default(uuid())
+  companyId                   String            @unique
+
+  // Numeração e série
+  serie                       String            @default("1")  // 1-3 dígitos
+  ultimaNfe                   Int               @default(0)    // último nNF emitido — próximo = +1
+
+  // Tributação no Simples
+  aliquotaCreditoSimples      Decimal?          @db.Decimal(5, 2)  // % crédito Simples Nacional
+
+  // DANFE e ambiente
+  danfeSimplificado           Boolean           @default(false)
+  ambiente                    AmbienteSefaz     @default(HOMOLOGACAO)
+  observacoes                 String?           // texto padrão para infCpl
+
+  // Contingência
+  tipoContingencia            TipoContingencia  @default(NORMAL)
+  contingenciaJustificativa   String?           // obrigatório se tipoContingencia != NORMAL (mín. 15 chars — valida no DTO)
+  contingenciaInicio          DateTime?
+
+  // Parametrização básica
+  calcularIcmsDesonerado      Boolean           @default(false)
+  incluirFreteBaseIcms        Boolean           @default(true)
+  destacarValorIcmsSt         Boolean           @default(false)
+
+  isActive                    Boolean           @default(true)
+  createdAt                   DateTime          @default(now())
+  updatedAt                   DateTime          @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+// ─── Catálogo NCM (Nomenclatura Comum do Mercosul) ──────────────────────────
+
+model NcmCode {
+  codigo     String   @id              // 8 dígitos sem máscara (ex: "01012100")
+  descricao  String
+
+  // hierarquia (derivada do código)
+  capitulo   String                    // 2 dígitos
+  posicao    String                    // 4 dígitos
+  subposicao String                    // 6 dígitos
+
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  products   Product[]
+
+  @@index([capitulo])
+  @@index([descricao])
+}
+
+// ─── Catálogo CFOP (Código Fiscal de Operações e Prestações) ────────────────
+
+model CfopCode {
+  codigo    String   @id              // 4 dígitos (ex: "5102")
+  descricao String
+  natureza  String                    // "ENTRADA" | "SAIDA" (derivado do primeiro dígito)
+  grupo     String                    // primeiro dígito como string ("1","2","3","5","6","7")
+  aplicacao String?                   // descrição complementar opcional
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products  Product[]
+
+  @@index([grupo])
+  @@index([natureza])
+}
+
+// ─── Catálogo CST ICMS (Código Situação Tributária) ─────────────────────────
+
+model CstIcmsCode {
+  codigo     String   @id              // 2 dígitos (ex: "00", "10", "20")
+  descricao  String
+  observacao String?
+
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  products   Product[]
+}
+
+// ─── Catálogo CSOSN (Código Situação da Operação no Simples Nacional) ───────
+
+model CsosnCode {
+  codigo     String   @id              // 3 dígitos (ex: "101", "102", "201"...)
+  descricao  String
+  observacao String?
+
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  products   Product[]
+}
+
+// ─── Catálogo IBGE — Municípios brasileiros ─────────────────────────────────
+
+model IbgeMunicipio {
+  codigo    String   @id              // 7 dígitos (ex: "3550308" = São Paulo)
+  nome      String                    // "São Paulo"
+  uf        String   @db.Char(2)      // "SP"
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([uf])
+  @@index([uf, nome])
+  @@index([nome])
+}
+
+// ─── Clientes/Destinatários (por empresa) ───────────────────────────────────
+
+model Customer {
+  id                  String       @id @default(uuid())
+  companyId           String
+
+  // Dados gerais (PF/PJ)
+  tipoPessoa          TipoPessoa
+  cpfCnpj             String                                // 11 (CPF) ou 14 (CNPJ) dígitos
+  name                String                                // razão social ou nome PF
+  nomeFantasia        String?                               // só PJ
+  inscricaoEstadual   String?                               // só PJ + indicadorIe = CONTRIBUINTE_ICMS
+  indicadorIe         IndicadorIeDestinatario @default(NAO_CONTRIBUINTE)
+  inscricaoSuframa    String?                               // zonas francas
+  email               String?
+  phone               String?
+
+  // Endereço (mesmo padrão de CompanyAddress)
+  logradouro          String?
+  numero              String?
+  complemento         String?
+  bairro              String?
+  cep                 String?
+  codIbgeMunicipio    String?
+  municipio           String?
+  uf                  String?
+  codPais             String?      @default("1058")
+  pais                String?      @default("BRASIL")
+
+  notes               String?
+  isActive            Boolean      @default(true)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  company             Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  nfes                Nfe[]
+
+  @@unique([companyId, cpfCnpj])
+  @@index([companyId])
+  @@index([cpfCnpj])
+  @@index([name])
+}
+
+// ─── Produtos/Serviços (por empresa) ────────────────────────────────────────
+
+model Product {
+  id                  String       @id @default(uuid())
+  companyId           String
+
+  // Identificação
+  codigoInterno       String                                // cProd
+  codigoBarras        String?                               // cEAN/GTIN
+  descricao           String                                // xProd
+
+  // Classificação fiscal
+  ncmCodigo           String?                               // FK → NcmCode.codigo (8 díg)
+  cestCodigo          String?                               // string livre — catálogo CEST em fase futura
+  cfopPadrao          String?                               // FK → CfopCode.codigo (4 díg)
+  unidade             String                                // uCom (ex: "UN", "KG", "L", "PC")
+  origem              MercadoriaOrigem @default(NACIONAL)
+
+  // Tributação padrão (depende do CRT da empresa)
+  cstIcmsPadrao       String?                               // FK → CstIcmsCode (quando CRT = REGIME_NORMAL)
+  csosnPadrao         String?                               // FK → CsosnCode (quando CRT = SIMPLES_NACIONAL/MEI)
+  aliquotaIcms        Decimal?     @db.Decimal(5, 2)        // %
+  aliquotaPis         Decimal?     @db.Decimal(5, 2)
+  aliquotaCofins      Decimal?     @db.Decimal(5, 2)
+  aliquotaIpi         Decimal?     @db.Decimal(5, 2)
+
+  // Comercial
+  precoVenda          Decimal      @db.Decimal(10, 2)
+  precoCusto          Decimal?     @db.Decimal(10, 2)
+
+  isActive            Boolean      @default(true)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  company             Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  ncm                 NcmCode?     @relation(fields: [ncmCodigo], references: [codigo])
+  cfop                CfopCode?    @relation(fields: [cfopPadrao], references: [codigo])
+  cstIcms             CstIcmsCode? @relation(fields: [cstIcmsPadrao], references: [codigo])
+  csosn               CsosnCode?   @relation(fields: [csosnPadrao], references: [codigo])
+  nfeItens            NfeItem[]
+
+  @@unique([companyId, codigoInterno])
+  @@index([companyId])
+  @@index([descricao])
+  @@index([ncmCodigo])
+  @@index([cfopPadrao])
+}
+
+// ─── NF-e emitida (cabeçalho) ──────────────────────────────────────────────
+
+model Nfe {
+  id                   String           @id @default(uuid())
+  companyId            String
+  customerId           String
+
+  // Identificação
+  serie                String                                      // copiado do CompanyNfeConfig no momento da criação
+  numero               Int?                                        // null em rascunho — atribuído ao transmitir
+  chave                String?          @unique                    // 44 dígitos — gerada ao transmitir
+
+  // Status / ciclo de vida
+  status               NfeStatus        @default(RASCUNHO)
+
+  // Configuração fiscal
+  finalidade           NfeFinalidade    @default(NORMAL)
+  naturezaOperacao     String                                      // ex: "Venda de mercadoria"
+  tipoOperacao         NfeTipoOperacao
+  modFrete             NfeModFrete      @default(SEM_TRANSPORTE)
+  indicadorPresenca    String?                                     // indPres: 0..5,9
+
+  // Totais (recalculados a partir dos itens)
+  totalProdutos        Decimal          @default(0)  @db.Decimal(15, 2)
+  totalFrete           Decimal          @default(0)  @db.Decimal(15, 2)
+  totalDesconto        Decimal          @default(0)  @db.Decimal(15, 2)
+  totalSeguro          Decimal          @default(0)  @db.Decimal(15, 2)
+  totalOutros          Decimal          @default(0)  @db.Decimal(15, 2)
+  totalIcms            Decimal          @default(0)  @db.Decimal(15, 2)
+  totalIcmsSt          Decimal          @default(0)  @db.Decimal(15, 2)
+  totalIpi             Decimal          @default(0)  @db.Decimal(15, 2)
+  totalPis             Decimal          @default(0)  @db.Decimal(15, 2)
+  totalCofins          Decimal          @default(0)  @db.Decimal(15, 2)
+  totalNota            Decimal          @default(0)  @db.Decimal(15, 2)
+
+  // Observações
+  observacoesFiscais   String?                                     // infAdFisco
+  observacoesContrib   String?                                     // infCpl
+
+  // Resposta SEFAZ (após transmissão)
+  protocoloAutorizacao String?
+  dataAutorizacao      DateTime?
+  cStat                String?
+  xMotivo              String?
+  xmlAssinado          String?          @db.Text                   // gzip base64 — XML assinado antes do envio
+  xmlAutorizado        String?          @db.Text                   // gzip base64 — XML com protNFe (final)
+
+  // Cancelamento (preenchido por evento)
+  justifCancelamento   String?
+  dataCancelamento     DateTime?
+
+  isActive             Boolean          @default(true)
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  company              Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer             Customer         @relation(fields: [customerId], references: [id])
+  itens                NfeItem[]
+  pagamentos           NfePagamento[]
+  eventos              NfeEvento[]
+
+  @@unique([companyId, serie, numero])  // numero só preenchido após transmitir; nulls múltiplos permitidos
+  @@index([companyId])
+  @@index([customerId])
+  @@index([status])
+  @@index([dataAutorizacao])
+}
+
+// ─── Itens da NF-e (snapshot por nota) ─────────────────────────────────────
+
+model NfeItem {
+  id                  String           @id @default(uuid())
+  nfeId               String
+  productId           String
+  ordem               Int                                          // nItem (1-based)
+
+  // Identificação (defaults vindos do Product, podem ser sobrescritos)
+  cfop                String                                       // pode diferir do CFOP padrão do Product
+  unidade             String
+
+  // Quantidade e valor
+  quantidade          Decimal          @db.Decimal(15, 4)
+  valorUnitario       Decimal          @db.Decimal(15, 4)
+  desconto            Decimal          @default(0)  @db.Decimal(15, 2)
+  valorTotal          Decimal          @db.Decimal(15, 2)          // qtd * vUnit - desconto
+
+  // ICMS (CST se CRT=Regime Normal, CSOSN se CRT=Simples)
+  origem              MercadoriaOrigem
+  cstIcms             String?                                      // 2 dígitos (CST) ou 3 dígitos (CSOSN)
+  baseCalcIcms        Decimal?         @db.Decimal(15, 2)
+  aliquotaIcms        Decimal?         @db.Decimal(5, 2)
+  valorIcms           Decimal?         @db.Decimal(15, 2)
+  baseCalcIcmsSt      Decimal?         @db.Decimal(15, 2)
+  aliquotaIcmsSt      Decimal?         @db.Decimal(5, 2)
+  valorIcmsSt         Decimal?         @db.Decimal(15, 2)
+
+  // PIS
+  cstPis              String?
+  baseCalcPis         Decimal?         @db.Decimal(15, 2)
+  aliquotaPis         Decimal?         @db.Decimal(5, 2)
+  valorPis            Decimal?         @db.Decimal(15, 2)
+
+  // COFINS
+  cstCofins           String?
+  baseCalcCofins      Decimal?         @db.Decimal(15, 2)
+  aliquotaCofins      Decimal?         @db.Decimal(5, 2)
+  valorCofins         Decimal?         @db.Decimal(15, 2)
+
+  // IPI
+  cstIpi              String?
+  baseCalcIpi         Decimal?         @db.Decimal(15, 2)
+  aliquotaIpi         Decimal?         @db.Decimal(5, 2)
+  valorIpi            Decimal?         @db.Decimal(15, 2)
+
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  nfe                 Nfe              @relation(fields: [nfeId], references: [id], onDelete: Cascade)
+  product             Product          @relation(fields: [productId], references: [id])
+
+  @@unique([nfeId, ordem])
+  @@index([nfeId])
+  @@index([productId])
+}
+
+// ─── Pagamentos da NF-e ────────────────────────────────────────────────────
+
+model NfePagamento {
+  id                  String           @id @default(uuid())
+  nfeId               String
+  formaPagamento      String                                       // codSefaz: "01" dinheiro, "03" cartão crédito, "17" PIX, "90" sem pagto, "99" outros
+  valor               Decimal          @db.Decimal(15, 2)
+
+  createdAt           DateTime         @default(now())
+
+  nfe                 Nfe              @relation(fields: [nfeId], references: [id], onDelete: Cascade)
+
+  @@index([nfeId])
+}
+
+// ─── Eventos da NF-e (cancelamento, CC-e, etc.) ────────────────────────────
+
+model NfeEvento {
+  id                  String           @id @default(uuid())
+  nfeId               String
+  tpEvento            String                                       // "110110" CC-e, "110111" cancelamento
+  sequencia           Int              @default(1)                 // nSeqEvento (1..N)
+  justificativa       String?
+  status              String           @default("PENDING")         // PENDING | AUTORIZADO | REJEITADO
+  protocolo           String?
+  cStat               String?
+  xMotivo             String?
+  xmlEnvio            String?          @db.Text
+  xmlResposta         String?          @db.Text
+
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  nfe                 Nfe              @relation(fields: [nfeId], references: [id], onDelete: Cascade)
+
+  @@unique([nfeId, tpEvento, sequencia])
+  @@index([nfeId])
+}
+
+// ─── Inutilização de numeração NF-e ────────────────────────────────────────
+
+model NfeInutilizacao {
+  id              String   @id @default(uuid())
+  companyId       String
+
+  // Faixa inutilizada
+  serie           String
+  numeroInicial   Int
+  numeroFinal     Int
+  ano             Int                                    // AAAA (ano da inutilização)
+  justificativa   String                                 // 15-255 chars
+
+  // Resposta SEFAZ
+  status          String   @default("PENDING")           // PENDING | HOMOLOGADA | REJEITADA
+  protocolo       String?                                // nProt do retorno
+  cStat           String?
+  xMotivo         String?
+  dhRecbto        DateTime?
+  xmlEnvio        String?  @db.Text
+  xmlResposta     String?  @db.Text
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, serie, numeroInicial, numeroFinal, ano])
+  @@index([companyId])
 }
 

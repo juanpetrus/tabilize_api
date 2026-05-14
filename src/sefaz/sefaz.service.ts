@@ -591,45 +591,78 @@ export class SefazService {
     xmlGzip: string,
     parsed: Record<string, unknown>,
   ) {
+    const isResumo = schema.startsWith('resNFe');
     const temXmlCompleto =
       schema.startsWith('procNFe') || schema.startsWith('NFe');
 
     const infNFe = this.extractInfNFe(parsed, schema);
     if (!infNFe) return false;
 
-    const ide = infNFe?.['ide'] as Record<string, unknown>;
-    const emit = infNFe?.['emit'] as Record<string, unknown>;
-    const dest = infNFe?.['dest'] as Record<string, unknown>;
-    const total = (infNFe?.['total'] as Record<string, unknown>)?.[
-      'ICMSTot'
-    ] as Record<string, unknown>;
+    let chave: string;
+    let emitenteCnpj: string | null;
+    let emitenteNome: string | null;
+    let destinCnpj: string | null;
+    let destinNome: string | null;
+    let valor: number | null;
+    let dataEmissao: Date | null;
+    let serie: string | null;
+    let numero: string | null;
+    let modelo: string | null;
+    let tipo: 'EMITIDA' | 'RECEBIDA' | null;
 
-    const idAttr =
-      ((infNFe?.['$'] as Record<string, unknown>)?.['Id'] as string) ?? '';
-    const chave =
-      idAttr.replace('NFe', '') ||
-      ((parsed?.['resNFe'] as Record<string, unknown>)?.['chNFe'] as string) ||
-      '';
-    if (!chave) return false;
+    if (isResumo) {
+      // resNFe (resumo): SEFAZ entrega quando a empresa é destinatário e ainda
+      // não manifestou Confirmação. Os campos top-level (CNPJ/xNome/IE)
+      // descrevem o EMITENTE (contraparte); a empresa é destinatário.
+      chave = (infNFe?.['chNFe'] as string) ?? '';
+      if (!chave) return false;
 
-    const emitenteCnpj =
-      (emit?.['CNPJ'] as string) ?? (emit?.['CPF'] as string) ?? null;
-    const emitenteNome = (emit?.['xNome'] as string) ?? null;
-    const destinCnpj =
-      (dest?.['CNPJ'] as string) ?? (dest?.['CPF'] as string) ?? null;
-    const destinNome = (dest?.['xNome'] as string) ?? null;
-    const valor = total?.['vNF'] ? parseFloat(total['vNF'] as string) : null;
-    const dhEmi = (ide?.['dhEmi'] as string) ?? (ide?.['dEmi'] as string);
-    const dataEmissao = dhEmi ? new Date(dhEmi) : null;
-    const serie = (ide?.['serie'] as string) ?? null;
-    const numero = (ide?.['nNF'] as string) ?? null;
-    const modelo = (ide?.['mod'] as string) ?? null;
-    const tipo =
-      emitenteCnpj === companyCnpj
-        ? 'EMITIDA'
-        : destinCnpj === companyCnpj
-          ? 'RECEBIDA'
-          : null;
+      emitenteCnpj = (infNFe?.['CNPJ'] as string) ?? null;
+      emitenteNome = (infNFe?.['xNome'] as string) ?? null;
+      destinCnpj = companyCnpj;
+      destinNome = null; // SEFAZ não envia o nome do próprio interessado
+      valor = infNFe?.['vNF']
+        ? parseFloat(infNFe['vNF'] as string)
+        : null;
+      const dhEmiRes = infNFe?.['dhEmi'] as string | undefined;
+      dataEmissao = dhEmiRes ? new Date(dhEmiRes) : null;
+      serie = null;
+      numero = null;
+      modelo = '55'; // resNFe só existe para modelo 55 (NF-e)
+      tipo = 'RECEBIDA'; // resNFe é sempre para o destinatário
+    } else {
+      // procNFe / NFe — XML completo
+      const ide = infNFe?.['ide'] as Record<string, unknown>;
+      const emit = infNFe?.['emit'] as Record<string, unknown>;
+      const dest = infNFe?.['dest'] as Record<string, unknown>;
+      const total = (infNFe?.['total'] as Record<string, unknown>)?.[
+        'ICMSTot'
+      ] as Record<string, unknown>;
+
+      const idAttr =
+        ((infNFe?.['$'] as Record<string, unknown>)?.['Id'] as string) ?? '';
+      chave = idAttr.replace('NFe', '');
+      if (!chave) return false;
+
+      emitenteCnpj =
+        (emit?.['CNPJ'] as string) ?? (emit?.['CPF'] as string) ?? null;
+      emitenteNome = (emit?.['xNome'] as string) ?? null;
+      destinCnpj =
+        (dest?.['CNPJ'] as string) ?? (dest?.['CPF'] as string) ?? null;
+      destinNome = (dest?.['xNome'] as string) ?? null;
+      valor = total?.['vNF'] ? parseFloat(total['vNF'] as string) : null;
+      const dhEmi = (ide?.['dhEmi'] as string) ?? (ide?.['dEmi'] as string);
+      dataEmissao = dhEmi ? new Date(dhEmi) : null;
+      serie = (ide?.['serie'] as string) ?? null;
+      numero = (ide?.['nNF'] as string) ?? null;
+      modelo = (ide?.['mod'] as string) ?? null;
+      tipo =
+        emitenteCnpj === companyCnpj
+          ? 'EMITIDA'
+          : destinCnpj === companyCnpj
+            ? 'RECEBIDA'
+            : null;
+    }
 
     await this.prisma.sefazNFe.upsert({
       where: { companyId_chave: { companyId, chave } },
@@ -647,12 +680,14 @@ export class SefazService {
         serie,
         numero,
         dataEmissao,
-        xmlGzip: temXmlCompleto ? xmlGzip : null,
+        // Guarda o XML mesmo do resumo (~500 bytes) — permite re-parse e
+        // serve de fallback até a nota completa chegar.
+        xmlGzip,
         temXmlCompleto,
       },
       update: {
         nsu,
-        modelo,
+        ...(modelo && { modelo }),
         ...(emitenteCnpj && { emitenteCnpj }),
         ...(emitenteNome && { emitenteNome }),
         ...(destinCnpj && { destinCnpj }),
@@ -662,6 +697,7 @@ export class SefazService {
         ...(numero && { numero }),
         ...(dataEmissao && { dataEmissao }),
         ...(tipo && { tipo }),
+        // Só sobrescreve xmlGzip se vier XML completo (não regredir).
         ...(temXmlCompleto && { xmlGzip, temXmlCompleto: true }),
       },
     });
@@ -917,7 +953,6 @@ export class SefazService {
         },
         timeout: 30000,
       });
-      console.log(response.data);
       responseXml = response.data;
     } catch (err: unknown) {
       const msg =
@@ -938,6 +973,17 @@ export class SefazService {
 
     const cStat = retDistDFeInt?.['cStat'] as string;
     const xMotivo = retDistDFeInt?.['xMotivo'] as string;
+
+    // Sempre persiste o resultado da última tentativa — útil para diagnóstico
+    // (cStat 632 = prazo expirado, 656 = consumo indevido, etc.)
+    await this.prisma.sefazNFe.update({
+      where: { id: nfeId },
+      data: {
+        lastSyncAt: new Date(),
+        lastSyncCStat: cStat ?? null,
+        lastSyncXMotivo: xMotivo ?? null,
+      },
+    });
 
     // 138 = documento localizado
     if (cStat !== '138') {
@@ -1475,6 +1521,104 @@ export class SefazService {
     </nfeRecepcaoEvento>
   </soap12:Body>
 </soap12:Envelope>`;
+  }
+
+  // ─── Manifestação em lote ────────────────────────────────────────────────
+
+  async manifestarLote(
+    teamId: string,
+    companyId: string,
+    userId: string,
+    dto: {
+      nfeIds: string[];
+      tipo: 'CIENCIA' | 'CONFIRMADA' | 'DESCONHECIMENTO' | 'NAO_REALIZADA';
+      justificativa?: string;
+    },
+  ) {
+    await this.ensureAccess(teamId, companyId, userId);
+
+    const sucessos: string[] = [];
+    const falhas: { id: string; motivo: string }[] = [];
+
+    for (const nfeId of dto.nfeIds) {
+      try {
+        await this.manifestar(
+          teamId,
+          companyId,
+          userId,
+          nfeId,
+          dto.tipo,
+          dto.justificativa,
+        );
+        sucessos.push(nfeId);
+      } catch (err: unknown) {
+        const motivo =
+          err instanceof Error ? err.message : 'Erro desconhecido';
+        falhas.push({ id: nfeId, motivo });
+      }
+    }
+
+    return {
+      total: dto.nfeIds.length,
+      sucessos: sucessos.length,
+      falhas,
+    };
+  }
+
+  // ─── Reprocessa notas com dados incompletos via consChNFe ────────────────
+
+  async reprocessarIncompletas(
+    teamId: string,
+    companyId: string,
+    userId: string,
+  ) {
+    await this.ensureAccess(teamId, companyId, userId);
+
+    const incompletas = await this.prisma.sefazNFe.findMany({
+      where: {
+        companyId,
+        temXmlCompleto: false,
+        chave: { not: '' },
+        // SEFAZ não permite consChNFe pelo emitente.
+        // Inclui tipo=null (resNFe sem classificação ainda).
+        OR: [{ tipo: null }, { tipo: 'RECEBIDA' }],
+      },
+      select: { id: true, chave: true },
+    });
+
+    const sucessos: string[] = [];
+    const falhas: { id: string; chave: string; motivo: string }[] = [];
+
+    for (const nfe of incompletas) {
+      try {
+        const result = await this.consultarNFe(
+          teamId,
+          companyId,
+          userId,
+          nfe.id,
+          false,
+        );
+        if (result.atualizado) {
+          sucessos.push(nfe.id);
+        } else {
+          falhas.push({
+            id: nfe.id,
+            chave: nfe.chave,
+            motivo: result.motivo,
+          });
+        }
+      } catch (err: unknown) {
+        const motivo =
+          err instanceof Error ? err.message : 'Erro desconhecido';
+        falhas.push({ id: nfe.id, chave: nfe.chave, motivo });
+      }
+    }
+
+    return {
+      total: incompletas.length,
+      sucessos: sucessos.length,
+      falhas,
+    };
   }
 
   private async ensureAccess(

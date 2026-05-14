@@ -165,3 +165,25 @@ export function forgotPasswordTemplate(name: string, resetUrl: string): string {
     ${paragraph('<span style="font-size:13px;color:#a1a1aa;">Se você não solicitou a redefinição, ignore este email. Sua senha permanece a mesma.</span>')}
   `);
 }
+
+export function nfeToCustomerTemplate(params: {
+  customerName: string;
+  emitenteNome: string;
+  numero: number;
+  serie: string;
+  chave: string;
+}): string {
+  const chaveFormatada = params.chave.replace(/(\d{4})/g, '$1 ').trim();
+  return layout(`
+    ${badge('NF-e', '#16a34a')}
+    ${heading(`NF-e N° ${params.numero} — Série ${params.serie}`)}
+    ${paragraph(`Olá, ${params.customerName}!`)}
+    ${paragraph(`<strong style="color:#18181b;">${params.emitenteNome}</strong> emitiu uma Nota Fiscal Eletrônica em seu nome. Em anexo encontram-se o XML e o DANFE da NF-e.`)}
+    ${infoBox(`
+      <p style="margin:0 0 4px;font-size:13px;font-weight:600;color:#18181b;">Chave de Acesso</p>
+      <p style="margin:0;font-size:12px;color:#52525b;font-family:monospace;word-break:break-all;">${chaveFormatada}</p>
+    `)}
+    ${divider()}
+    ${paragraph('<span style="font-size:13px;color:#a1a1aa;">Guarde os arquivos anexos para fins fiscais. Em caso de dúvidas, entre em contato com o emitente.</span>')}
+  `);
+}

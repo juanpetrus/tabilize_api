@@ -7,6 +7,7 @@ import {
   paymentFailedTemplate,
   subscriptionCancelledTemplate,
   forgotPasswordTemplate,
+  nfeToCustomerTemplate,
 } from './mail.templates.js';
 
 const resend = new Resend(process.env['RESEND_API_KEY']);
@@ -73,6 +74,42 @@ export class MailService {
       to,
       subject: 'Redefinir sua senha',
       html: forgotPasswordTemplate(name, resetUrl),
+    });
+  }
+
+  async sendNfeToCustomer(params: {
+    to: string;
+    customerName: string;
+    emitenteNome: string;
+    numero: number;
+    serie: string;
+    chave: string;
+    xmlBuffer: Buffer;
+    pdfBuffer: Buffer;
+    cc?: string[];
+  }): Promise<void> {
+    await resend.emails.send({
+      from: FROM,
+      to: params.to,
+      ...(params.cc && params.cc.length > 0 ? { cc: params.cc } : {}),
+      subject: `NF-e ${params.numero} série ${params.serie} - ${params.emitenteNome}`,
+      html: nfeToCustomerTemplate({
+        customerName: params.customerName,
+        emitenteNome: params.emitenteNome,
+        numero: params.numero,
+        serie: params.serie,
+        chave: params.chave,
+      }),
+      attachments: [
+        {
+          filename: `${params.chave}-nfe.xml`,
+          content: params.xmlBuffer.toString('base64'),
+        },
+        {
+          filename: `${params.chave}-danfe.pdf`,
+          content: params.pdfBuffer.toString('base64'),
+        },
+      ],
     });
   }
 }
