@@ -1076,6 +1076,7 @@ export class SefazService {
     try {
       const compressed = Buffer.from(xmlGzip, 'base64');
       const xmlBuffer = await gunzipAsync(compressed);
+      console.log(`XML ${isResumo ? 'resumo' : 'completo'} obtido da SEFAZ: ${xmlBuffer.toString('utf-8')}`);
       docParsed = await parseStringPromise(xmlBuffer.toString('utf-8'), {
         explicitArray: false,
       });
