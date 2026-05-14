@@ -1,6 +1,7 @@
 import {
   Injectable,
   BadRequestException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import axios from 'axios';
@@ -31,6 +32,8 @@ interface DocZip {
 
 @Injectable()
 export class SefazService {
+  private readonly logger = new Logger(SefazService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly certificates: CertificatesService,
@@ -600,15 +603,18 @@ export class SefazService {
 
     let chave: string;
     let emitenteCnpj: string | null;
+    let emitenteIe: string | null = null;
     let emitenteNome: string | null;
     let destinCnpj: string | null;
     let destinNome: string | null;
     let valor: number | null;
     let dataEmissao: Date | null;
+    let dataAutorizacao: Date | null = null;
     let serie: string | null;
     let numero: string | null;
     let modelo: string | null;
     let tipo: 'EMITIDA' | 'RECEBIDA' | null;
+    let status: 'AUTORIZADA' | 'CANCELADA' | 'DENEGADA' = 'AUTORIZADA';
 
     if (isResumo) {
       // resNFe (resumo): SEFAZ entrega quando a empresa é destinatário e ainda
@@ -618,6 +624,7 @@ export class SefazService {
       if (!chave) return false;
 
       emitenteCnpj = (infNFe?.['CNPJ'] as string) ?? null;
+      emitenteIe = (infNFe?.['IE'] as string) ?? null;
       emitenteNome = (infNFe?.['xNome'] as string) ?? null;
       destinCnpj = companyCnpj;
       destinNome = null; // SEFAZ não envia o nome do próprio interessado
@@ -626,6 +633,12 @@ export class SefazService {
         : null;
       const dhEmiRes = infNFe?.['dhEmi'] as string | undefined;
       dataEmissao = dhEmiRes ? new Date(dhEmiRes) : null;
+      const dhRecbtoRes = infNFe?.['dhRecbto'] as string | undefined;
+      dataAutorizacao = dhRecbtoRes ? new Date(dhRecbtoRes) : null;
+      // cSitNFe: 1=AUTORIZADA, 2=CANCELADA, 3=DENEGADA
+      const cSitNFe = infNFe?.['cSitNFe'] as string | undefined;
+      if (cSitNFe === '2') status = 'CANCELADA';
+      else if (cSitNFe === '3') status = 'DENEGADA';
       serie = null;
       numero = null;
       modelo = '55'; // resNFe só existe para modelo 55 (NF-e)
@@ -646,6 +659,7 @@ export class SefazService {
 
       emitenteCnpj =
         (emit?.['CNPJ'] as string) ?? (emit?.['CPF'] as string) ?? null;
+      emitenteIe = (emit?.['IE'] as string) ?? null;
       emitenteNome = (emit?.['xNome'] as string) ?? null;
       destinCnpj =
         (dest?.['CNPJ'] as string) ?? (dest?.['CPF'] as string) ?? null;
@@ -653,6 +667,13 @@ export class SefazService {
       valor = total?.['vNF'] ? parseFloat(total['vNF'] as string) : null;
       const dhEmi = (ide?.['dhEmi'] as string) ?? (ide?.['dEmi'] as string);
       dataEmissao = dhEmi ? new Date(dhEmi) : null;
+      // dataAutorizacao vem do protNFe quando o XML é nfeProc completo
+      const protNFe = (parsed?.['nfeProc'] as Record<string, unknown>)?.[
+        'protNFe'
+      ] as Record<string, unknown> | undefined;
+      const infProt = protNFe?.['infProt'] as Record<string, unknown> | undefined;
+      const dhRecbtoProt = infProt?.['dhRecbto'] as string | undefined;
+      dataAutorizacao = dhRecbtoProt ? new Date(dhRecbtoProt) : null;
       serie = (ide?.['serie'] as string) ?? null;
       numero = (ide?.['nNF'] as string) ?? null;
       modelo = (ide?.['mod'] as string) ?? null;
@@ -671,8 +692,10 @@ export class SefazService {
         chave,
         nsu,
         tipo,
+        status,
         modelo,
         emitenteCnpj,
+        emitenteIe,
         emitenteNome,
         destinCnpj,
         destinNome,
@@ -680,6 +703,7 @@ export class SefazService {
         serie,
         numero,
         dataEmissao,
+        dataAutorizacao,
         // Guarda o XML mesmo do resumo (~500 bytes) — permite re-parse e
         // serve de fallback até a nota completa chegar.
         xmlGzip,
@@ -687,8 +711,10 @@ export class SefazService {
       },
       update: {
         nsu,
+        status,
         ...(modelo && { modelo }),
         ...(emitenteCnpj && { emitenteCnpj }),
+        ...(emitenteIe && { emitenteIe }),
         ...(emitenteNome && { emitenteNome }),
         ...(destinCnpj && { destinCnpj }),
         ...(destinNome && { destinNome }),
@@ -696,6 +722,7 @@ export class SefazService {
         ...(serie && { serie }),
         ...(numero && { numero }),
         ...(dataEmissao && { dataEmissao }),
+        ...(dataAutorizacao && { dataAutorizacao }),
         ...(tipo && { tipo }),
         // Só sobrescreve xmlGzip se vier XML completo (não regredir).
         ...(temXmlCompleto && { xmlGzip, temXmlCompleto: true }),
@@ -923,14 +950,27 @@ export class SefazService {
     });
     if (!nfe) throw new NotFoundException('NF-e não encontrada');
     if (!nfe.chave) throw new BadRequestException('NF-e sem chave de acesso');
-    if (nfe.temXmlCompleto && !force)
+
+    this.logger.log(
+      `consultarNFe início chave=${nfe.chave} force=${force} ambiente=${ENV}`,
+    );
+
+    if (nfe.temXmlCompleto && !force) {
+      this.logger.log(
+        `consultarNFe fim chave=${nfe.chave} motivo='XML completo já disponível'`,
+      );
       return { atualizado: false, motivo: 'XML completo já disponível' };
-    if (nfe.tipo === 'EMITIDA')
+    }
+    if (nfe.tipo === 'EMITIDA') {
+      this.logger.warn(
+        `consultarNFe pulada chave=${nfe.chave} motivo='nota emitida — SEFAZ não permite consChNFe pelo emitente'`,
+      );
       return {
         atualizado: false,
         motivo:
           'NF-e emitida — consulta por chave não permitida pela SEFAZ para o emitente',
       };
+    }
 
     const company = await this.prisma.company.findFirst({
       where: { id: companyId },
@@ -974,6 +1014,14 @@ export class SefazService {
     const cStat = retDistDFeInt?.['cStat'] as string;
     const xMotivo = retDistDFeInt?.['xMotivo'] as string;
 
+    this.logger.log(
+      `consultarNFe resposta SEFAZ cStat=${cStat} xMotivo='${xMotivo}'`,
+    );
+
+    this.logger.log(
+      `consultarNFe resposta SEFAZ body='${body ? JSON.stringify(body) : '-'}'`,
+    );
+
     // Sempre persiste o resultado da última tentativa — útil para diagnóstico
     // (cStat 632 = prazo expirado, 656 = consumo indevido, etc.)
     await this.prisma.sefazNFe.update({
@@ -987,6 +1035,9 @@ export class SefazService {
 
     // 138 = documento localizado
     if (cStat !== '138') {
+      this.logger.warn(
+        `consultarNFe fim chave=${nfe.chave} cStat=${cStat} atualizado=false`,
+      );
       return { atualizado: false, motivo: `${cStat} - ${xMotivo}` };
     }
 
@@ -1007,6 +1058,9 @@ export class SefazService {
     const doc = procDoc ?? resDoc;
 
     if (!doc) {
+      this.logger.warn(
+        `consultarNFe fim chave=${nfe.chave} motivo='documento não encontrado na resposta'`,
+      );
       return {
         atualizado: false,
         motivo: 'Documento não encontrado na resposta',
@@ -1029,30 +1083,47 @@ export class SefazService {
     }
 
     const infNFe = this.extractInfNFe(docParsed, schema);
-
+    console.log(infNFe);
     if (isResumo && infNFe) {
       // resNFe: campos top-level descrevem a contraparte (emitente).
       // Empresa é destinatário; tipo = RECEBIDA.
       const emitenteCnpj = (infNFe?.['CNPJ'] as string) ?? null;
+      const emitenteIe = (infNFe?.['IE'] as string) ?? null;
       const emitenteNome = (infNFe?.['xNome'] as string) ?? null;
       const vNF = infNFe?.['vNF'] as string | undefined;
       const dhEmiRes = infNFe?.['dhEmi'] as string | undefined;
+      const dhRecbtoRes = infNFe?.['dhRecbto'] as string | undefined;
+      const cSitNFe = infNFe?.['cSitNFe'] as string | undefined;
+      const status =
+        cSitNFe === '2'
+          ? 'CANCELADA'
+          : cSitNFe === '3'
+            ? 'DENEGADA'
+            : 'AUTORIZADA';
 
       await this.prisma.sefazNFe.update({
         where: { id: nfeId },
         data: {
           xmlGzip, // guarda o resumo pra fallback futuro
           temXmlCompleto: false,
+          status,
           emitenteCnpj: emitenteCnpj ?? nfe.emitenteCnpj,
+          emitenteIe: emitenteIe ?? nfe.emitenteIe,
           emitenteNome: emitenteNome ?? nfe.emitenteNome,
           destinCnpj: nfe.destinCnpj ?? cnpj,
           valor: vNF ? parseFloat(vNF) : nfe.valor,
           modelo: nfe.modelo ?? '55',
           dataEmissao: dhEmiRes ? new Date(dhEmiRes) : nfe.dataEmissao,
+          dataAutorizacao: dhRecbtoRes
+            ? new Date(dhRecbtoRes)
+            : nfe.dataAutorizacao,
           tipo: 'RECEBIDA',
         },
       });
 
+      this.logger.log(
+        `consultarNFe fim chave=${nfe.chave} resumo=true atualizado=true emitente='${emitenteNome ?? '-'}'`,
+      );
       return {
         atualizado: true,
         motivo:
@@ -1075,12 +1146,20 @@ export class SefazService {
 
     const dhEmi = (ide?.['dhEmi'] as string) ?? (ide?.['dEmi'] as string);
 
+    // dhRecbto vem do protNFe no nfeProc
+    const protNFe = (docParsed?.['nfeProc'] as Record<string, unknown>)?.[
+      'protNFe'
+    ] as Record<string, unknown> | undefined;
+    const infProt = protNFe?.['infProt'] as Record<string, unknown> | undefined;
+    const dhRecbtoProt = infProt?.['dhRecbto'] as string | undefined;
+
     await this.prisma.sefazNFe.update({
       where: { id: nfeId },
       data: {
         xmlGzip,
         temXmlCompleto: true,
         emitenteCnpj: emitenteCnpj ?? nfe.emitenteCnpj,
+        emitenteIe: (emit?.['IE'] as string) ?? nfe.emitenteIe,
         emitenteNome: (emit?.['xNome'] as string) ?? nfe.emitenteNome,
         destinCnpj: destinCnpj ?? nfe.destinCnpj,
         destinNome: (dest?.['xNome'] as string) ?? nfe.destinNome,
@@ -1091,6 +1170,9 @@ export class SefazService {
         numero: (ide?.['nNF'] as string) ?? nfe.numero,
         modelo: (ide?.['mod'] as string) ?? nfe.modelo,
         dataEmissao: dhEmi ? new Date(dhEmi) : nfe.dataEmissao,
+        dataAutorizacao: dhRecbtoProt
+          ? new Date(dhRecbtoProt)
+          : nfe.dataAutorizacao,
         tipo:
           emitenteCnpj === cnpj
             ? 'EMITIDA'
@@ -1100,6 +1182,9 @@ export class SefazService {
       },
     });
 
+    this.logger.log(
+      `consultarNFe fim chave=${nfe.chave} resumo=false atualizado=true motivo='XML completo obtido'`,
+    );
     return { atualizado: true, motivo: 'XML completo obtido e salvo' };
   }
 

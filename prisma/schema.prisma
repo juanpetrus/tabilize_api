@@ -460,8 +460,9 @@ model SefazNFe {
   chave          String
   nsu            String?
   tipo           String?   // EMITIDA | RECEBIDA
-  status         String    @default("AUTORIZADA") // AUTORIZADA | CANCELADA
+  status         String    @default("AUTORIZADA") // AUTORIZADA | CANCELADA | DENEGADA
   emitenteCnpj   String?
+  emitenteIe     String?   // IE do emitente (vem no resNFe e procNFe)
   emitenteNome   String?
   destinCnpj     String?
   destinNome     String?
@@ -469,6 +470,7 @@ model SefazNFe {
   serie          String?
   numero         String?
   dataEmissao    DateTime?
+  dataAutorizacao DateTime? // dhRecbto - data de autorização na SEFAZ
   xmlGzip        String?   @db.Text
   temXmlCompleto Boolean   @default(false)
   modelo         String?   // 55 = NF-e | 65 = NFC-e
