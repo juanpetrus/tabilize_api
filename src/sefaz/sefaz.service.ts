@@ -994,6 +994,7 @@ export class SefazService {
         timeout: 30000,
       });
       responseXml = response.data;
+      console.log(`Resposta SEFAZ: ${responseXml}`);
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : 'Erro ao conectar na SEFAZ';
