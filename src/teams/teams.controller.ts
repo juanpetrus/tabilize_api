@@ -13,6 +13,7 @@ import { TeamsService } from './teams.service.js';
 import { CreateTeamDto } from './dto/create-team.dto.js';
 import { InviteMemberDto } from './dto/invite-member.dto.js';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto.js';
+import { ResetMemberPasswordDto } from './dto/reset-member-password.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 
 interface AuthRequest {
@@ -65,6 +66,21 @@ export class TeamsController {
     @Body() dto: UpdateMemberRoleDto,
   ) {
     return this.teamsService.updateMemberRole(
+      teamId,
+      memberId,
+      req.user.id,
+      dto,
+    );
+  }
+
+  @Patch(':teamId/members/:memberId/password')
+  resetMemberPassword(
+    @Param('teamId') teamId: string,
+    @Param('memberId') memberId: string,
+    @Req() req: AuthRequest,
+    @Body() dto: ResetMemberPasswordDto,
+  ) {
+    return this.teamsService.resetMemberPassword(
       teamId,
       memberId,
       req.user.id,

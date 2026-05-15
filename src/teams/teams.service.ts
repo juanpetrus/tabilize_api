@@ -9,6 +9,7 @@ import { PrismaService } from '../database/index.js';
 import { CreateTeamDto } from './dto/create-team.dto.js';
 import { InviteMemberDto } from './dto/invite-member.dto.js';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto.js';
+import { ResetMemberPasswordDto } from './dto/reset-member-password.dto.js';
 import { TeamRole } from '../../generated/prisma/enums.js';
 
 @Injectable()
@@ -162,6 +163,40 @@ export class TeamsService {
       data: { role: dto.role },
       include: { user: { select: { id: true, name: true, email: true } } },
     });
+  }
+
+  async resetMemberPassword(
+    teamId: string,
+    memberId: string,
+    requesterId: string,
+    dto: ResetMemberPasswordDto,
+  ) {
+    await this.ensureAdminOrOwner(teamId, requesterId);
+
+    const member = await this.prisma.teamMember.findFirst({
+      where: { id: memberId, teamId, isActive: true },
+    });
+
+    if (!member) {
+      throw new NotFoundException('Membro não encontrado');
+    }
+
+    if (member.role === TeamRole.OWNER) {
+      throw new ForbiddenException(
+        'Não é possível redefinir a senha do dono da equipe',
+      );
+    }
+
+    const newPassword = dto.password ?? Math.random().toString(36).slice(-8);
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    const user = await this.prisma.user.update({
+      where: { id: member.userId },
+      data: { password: hashedPassword },
+      select: { id: true, name: true, email: true },
+    });
+
+    return { user, ...(dto.password ? {} : { tempPassword: newPassword }) };
   }
 
   async removeMember(teamId: string, memberId: string, requesterId: string) {
