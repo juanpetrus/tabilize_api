@@ -28,10 +28,79 @@ import numpy as np
 import easyocr
 
 ALLOW = "abcdefghijklmnopqrstuvwxyz0123456789"
+EXPECTED_CHARS = 6  # captcha do TST tem sempre 6 caracteres
 
 # Em produção (Railway), modelos foram pré-baixados aqui no build.
 # Localmente, EasyOCR cai no default (~/.EasyOCR/).
 _MODEL_DIR = "/app/easyocr-models" if os.path.isdir("/app/easyocr-models") else None
+
+
+def _make_crop(bin_img, mask, x: int, y: int, w: int, h: int):
+    """Recorta um pedaço da imagem original mascarado (sem círculos)."""
+    H, W = bin_img.shape
+    pad = 10
+    x0 = max(0, x - pad)
+    y0 = max(0, y - pad)
+    x1 = min(W, x + w + pad)
+    y1 = min(H, y + h + pad)
+    inv = cv2.bitwise_not(bin_img[y0:y1, x0:x1])
+    crop_mask = mask[y0:y1, x0:x1]
+    char_only = cv2.bitwise_and(inv, crop_mask)
+    crop = cv2.bitwise_not(char_only)
+    return cv2.copyMakeBorder(crop, 25, 25, 25, 25, cv2.BORDER_CONSTANT, value=255)
+
+
+def _force_exact_count(candidates, target: int, bin_img, mask):
+    """Ajusta a lista de candidatos para conter exatamente `target` itens."""
+    # Caso 1: temos mais que o esperado → mantém os `target` mais largos
+    # (chars verdadeiros são maiores que ruído residual).
+    while len(candidates) > target:
+        smallest_idx = min(
+            range(len(candidates)),
+            key=lambda i: candidates[i]["w"] * candidates[i]["solidity"],
+        )
+        candidates.pop(smallest_idx)
+
+    # Caso 2: faltam segmentos → divide o mais largo em duas metades.
+    # Repete até bater no target.
+    while len(candidates) < target:
+        if not candidates:
+            break
+        widest_idx = max(range(len(candidates)), key=lambda i: candidates[i]["w"])
+        widest = candidates[widest_idx]
+        w = widest["w"]
+        if w < 30:
+            break  # nada que valha a pena dividir
+
+        # Pega a bbox real do componente (estamos recortando do bin_img/mask)
+        # — para isso precisamos das stats originais. Como simplificação,
+        # dividimos a IMAGEM JÁ RECORTADA do candidato no meio.
+        img = widest["img"]
+        ih, iw = img.shape[:2]
+        # img tem margem de 25px de cada lado; ignora margem.
+        inner_w = iw - 50
+        if inner_w < 30:
+            break
+
+        mid = 25 + inner_w // 2
+        left_img = img[:, :mid + 5]
+        right_img = img[:, mid - 5:]
+
+        candidates.pop(widest_idx)
+        candidates.append(
+            {"x": widest["x"], "img": left_img, "w": w // 2, "solidity": widest["solidity"]}
+        )
+        candidates.append(
+            {
+                "x": widest["x"] + w // 2,
+                "img": right_img,
+                "w": w // 2,
+                "solidity": widest["solidity"],
+            }
+        )
+        candidates.sort(key=lambda c: c["x"])
+
+    return candidates
 
 
 def segment_chars(image_path: str, debug_dir: str | None = None):
@@ -117,6 +186,14 @@ def segment_chars(image_path: str, debug_dir: str | None = None):
 
     candidates.sort(key=lambda c: c["x"])
 
+    # ─── Força EXATAMENTE 6 segmentos ─────────────────────────────────────
+    # Captcha do TST sempre tem 6 chars. Usa isso pra recuperar erros de
+    # segmentação:
+    # - Se sobrou (>6): descarta o(s) menor(es) — provavelmente é(são) ruído
+    # - Se faltou (<6): pega o(s) mais largo(s) e divide na vertical, pois
+    #   provavelmente são 2 chars grudados num componente.
+    candidates = _force_exact_count(candidates, EXPECTED_CHARS, bin_img, mask)
+
     if debug_dir:
         os.makedirs(debug_dir, exist_ok=True)
         cv2.imwrite(os.path.join(debug_dir, "_01-binary.png"), bin_img)
@@ -137,21 +214,56 @@ def segment_chars(image_path: str, debug_dir: str | None = None):
     return [c["img"] for c in candidates], bin_img
 
 
+def _best_text(detail_result) -> str:
+    """De um resultado detail=1, pega o texto com maior confiança."""
+    if not detail_result:
+        return ""
+    detail_result.sort(key=lambda r: -r[2])  # ordena por confiança desc
+    txt = re.sub(r"[^a-z0-9]", "", detail_result[0][1].lower())
+    return txt[:1] if txt else ""
+
+
 def ocr_one(reader, img_array) -> str:
-    """OCR de uma única imagem (esperado: 1 caractere)."""
-    # EasyOCR aceita ndarray
-    result = reader.readtext(
+    """OCR de um segmento (esperado: 1 caractere). Cascade de passes."""
+    # 1ª passada: thresholds normais com allowlist
+    r1 = reader.readtext(
         img_array,
         allowlist=ALLOW,
-        detail=0,
+        detail=1,
         paragraph=False,
         text_threshold=0.3,
         low_text=0.2,
         link_threshold=0.2,
-        width_ths=2.0,
     )
-    s = re.sub(r"[^a-z0-9]", "", "".join(result).lower())
-    return s[:1] if s else ""  # primeiro char só, já que é segmento
+    t = _best_text(r1)
+    if t:
+        return t
+
+    # 2ª passada: thresholds muito baixos, sem allowlist (pega o que sair)
+    r2 = reader.readtext(
+        img_array,
+        detail=1,
+        paragraph=False,
+        text_threshold=0.1,
+        low_text=0.05,
+        link_threshold=0.05,
+    )
+    t = _best_text(r2)
+    if t:
+        return t
+
+    # 3ª passada: imagem aumentada 2x — às vezes resolve chars finos
+    h, w = img_array.shape[:2]
+    bigger = cv2.resize(img_array, (w * 2, h * 2), interpolation=cv2.INTER_CUBIC)
+    r3 = reader.readtext(
+        bigger,
+        detail=1,
+        paragraph=False,
+        text_threshold=0.1,
+        low_text=0.05,
+        link_threshold=0.05,
+    )
+    return _best_text(r3)
 
 
 def main() -> int:
@@ -176,15 +288,30 @@ def main() -> int:
     reader = easyocr.Reader(["en"], **reader_kwargs)
 
     pieces = []
+    missing = 0
     for ch_img in chars:
         c = ocr_one(reader, ch_img)
-        pieces.append(c if c else "?")
+        if c:
+            pieces.append(c)
+        else:
+            # Segmento existe mas OCR não conseguiu ler.
+            # Mantém placeholder pra preservar contagem - Node decide se vale
+            # submeter (rejeitar string com '?' é melhor que submeter incompleto).
+            pieces.append("?")
+            missing += 1
 
-    text = "".join(pieces).replace("?", "")
-    print(text, flush=True)
+    text = "".join(pieces)
+    # Stdout limpo (sem '?') pra Node consumir, mas se faltou char, devolve vazio
+    # — assim Node sabe que não tem string confiável e recarrega captcha.
+    if missing > 0:
+        print("", flush=True)
+    else:
+        print(text, flush=True)
 
-    # Diagnóstico para stderr (não atrapalha stdout consumido pelo Node)
-    print(f"  segmentos: {len(chars)}  resultado: {text}", file=sys.stderr)
+    print(
+        f"  segmentos: {len(chars)}  resultado: {text}  missing: {missing}",
+        file=sys.stderr,
+    )
     return 0
 
 

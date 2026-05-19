@@ -115,7 +115,9 @@ export class CndIntegrationService {
     }
 
     let browser: Browser | null = null;
-    const MAX_TENTATIVAS = 10;
+    // 20 tentativas: filtro estrito (só submete com 6 chars) descarta a
+    // maioria dos OCRs, então damos mais chances ao loop.
+    const MAX_TENTATIVAS = 20;
 
     try {
       this.logger.log(`Iniciando consulta CNDT para CNPJ: ${cnpjLimpo}`);
@@ -174,9 +176,11 @@ export class CndIntegrationService {
         const captchaTexto = await this.solveCaptchaCNDT(captchaBuf);
         this.logger.log(`Captcha OCR: "${captchaTexto}"`);
 
-        if (captchaTexto.length < 4) {
+        // Captcha do TST sempre tem 6 chars. Se OCR não devolveu 6 exatos,
+        // recarrega ao invés de gastar uma submissão garantidamente errada.
+        if (captchaTexto.length !== 6) {
           this.logger.warn(
-            `Captcha curto (${captchaTexto.length} chars), recarregando`,
+            `Captcha incompleto (${captchaTexto.length} chars, esperado 6), recarregando`,
           );
           continue;
         }
