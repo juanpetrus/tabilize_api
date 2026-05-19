@@ -1,0 +1,42 @@
+# Libs nativas necessárias para o Chromium do Playwright rodar no container Railway.
+# Sem isso, a consulta CRF/FGTS (e qualquer outra via Playwright) falha com:
+#   "browserType.launch: Target page, context or browser has been closed"
+# O CRF da Caixa exige browser real por causa do anti-bot Imperva/PerfDrive.
+
+[phases.setup]
+aptPkgs = [
+  "libnspr4",
+  "libnss3",
+  "libasound2",
+  "libatk1.0-0",
+  "libatk-bridge2.0-0",
+  "libcups2",
+  "libdbus-1-3",
+  "libdrm2",
+  "libxkbcommon0",
+  "libatspi2.0-0",
+  "libxcomposite1",
+  "libxdamage1",
+  "libxfixes3",
+  "libxrandr2",
+  "libgbm1",
+  "libpango-1.0-0",
+  "libcairo2",
+  "libxshmfence1",
+  "fonts-liberation",
+  "fonts-noto-color-emoji"
+]
+
+# Install phase é cacheada pelo hash do package-lock.json no Railway.
+# Colocar o download do Chromium aqui evita re-download em todo commit -
+# só roda de novo quando o lockfile muda (ex.: bump do Playwright).
+[phases.install]
+cmds = [
+  "npm ci",
+  "npx playwright install chromium"
+]
+
+[phases.build]
+cmds = [
+  "npm run build"
+]
