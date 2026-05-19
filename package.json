@@ -7,7 +7,6 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "prisma generate && nest build",
-    "postinstall": "npx --no-install playwright install chromium || true",
     "seed": "tsx prisma/seed.ts",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
