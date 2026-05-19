@@ -17,11 +17,21 @@ import warnings
 
 warnings.filterwarnings("ignore")
 
+# No Railway, pacotes pip vão pra /app/python-packages via --target.
+# Localmente (dev), site-packages padrão do venv/system Python.
+_RAILWAY_DEPS = "/app/python-packages"
+if os.path.isdir(_RAILWAY_DEPS) and _RAILWAY_DEPS not in sys.path:
+    sys.path.insert(0, _RAILWAY_DEPS)
+
 import cv2
 import numpy as np
 import easyocr
 
 ALLOW = "abcdefghijklmnopqrstuvwxyz0123456789"
+
+# Em produção (Railway), modelos foram pré-baixados aqui no build.
+# Localmente, EasyOCR cai no default (~/.EasyOCR/).
+_MODEL_DIR = "/app/easyocr-models" if os.path.isdir("/app/easyocr-models") else None
 
 
 def segment_chars(image_path: str, debug_dir: str | None = None):
@@ -160,7 +170,10 @@ def main() -> int:
         print("", flush=True)
         return 0
 
-    reader = easyocr.Reader(["en"], gpu=False, verbose=False)
+    reader_kwargs = {"gpu": False, "verbose": False}
+    if _MODEL_DIR:
+        reader_kwargs["model_storage_directory"] = _MODEL_DIR
+    reader = easyocr.Reader(["en"], **reader_kwargs)
 
     pieces = []
     for ch_img in chars:

@@ -9,8 +9,9 @@
         "...",
         "npx playwright install chromium",
         "python3 -m pip install --upgrade pip",
-        "python3 -m pip install --extra-index-url https://download.pytorch.org/whl/cpu torch torchvision",
-        "python3 -m pip install easyocr opencv-python-headless"
+        "mkdir -p /app/python-packages",
+        "python3 -m pip install --target /app/python-packages --extra-index-url https://download.pytorch.org/whl/cpu torch torchvision",
+        "python3 -m pip install --target /app/python-packages easyocr opencv-python-headless"
       ]
     },
     "build": {
@@ -21,10 +22,6 @@
     }
   },
   "deploy": {
-    "inputs": [
-      { "step": "build" },
-      { "step": "install" }
-    ],
     "aptPackages": [
       "libnspr4",
       "libnss3",
