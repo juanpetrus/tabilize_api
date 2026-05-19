@@ -1,7 +1,11 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { chromium as chromiumExtra } from 'playwright-extra';
 import { chromium, Browser, Page } from 'playwright';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import * as cheerio from 'cheerio';
 import * as forge from 'node-forge';
+
+chromiumExtra.use(StealthPlugin());
 import { PrismaService } from '../database/index.js';
 import { StorageService } from '../storage/storage.service.js';
 import { CertificatesService } from '../certificates/certificates.service.js';
@@ -261,7 +265,9 @@ export class CndIntegrationService {
     try {
       this.logger.log(`Iniciando consulta CRF para CNPJ: ${cnpjLimpo}`);
 
-      browser = await chromium.launch({
+      // Stealth é obrigatório aqui: o portal da Caixa usa Imperva/PerfDrive +
+      // hCaptcha e bloqueia Playwright vanilla antes mesmo do formulário.
+      browser = await chromiumExtra.launch({
         headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
       });
@@ -269,40 +275,76 @@ export class CndIntegrationService {
       const context = await browser.newContext({
         userAgent:
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        viewport: { width: 1280, height: 720 },
+        viewport: { width: 1280, height: 900 },
       });
 
       const page = await context.newPage();
 
-      // Acessa a página de consulta
+      // 1) Página inicial de consulta
       await page.goto(
         'https://consulta-crf.caixa.gov.br/consultacrf/pages/consultaEmpregador.jsf',
-        {
-          waitUntil: 'networkidle',
-          timeout: 30000,
-        },
+        { waitUntil: 'domcontentloaded', timeout: 30000 },
       );
 
-      // Aguarda o formulário carregar
-      await page.waitForSelector(
-        'input[id*="inscricao"], input[name*="inscricao"]',
-        { timeout: 10000 },
+      await page.waitForSelector('input[name="mainForm:txtInscricao1"]', {
+        timeout: 15000,
+      });
+
+      // Preenche o CNPJ (tipo de inscrição CNPJ já vem selecionado por padrão)
+      await page.fill('input[name="mainForm:txtInscricao1"]', cnpjLimpo);
+
+      // 2) Clica em "Consultar" e aguarda navegação para a tela de Situação
+      await Promise.all([
+        page
+          .waitForLoadState('networkidle', { timeout: 30000 })
+          .catch(() => null),
+        page.click('input[name="mainForm:btnConsultar"]'),
+      ]);
+
+      // Pequena espera para o JSF renderizar o resultado
+      await page.waitForTimeout(1500);
+
+      const situacaoHtml = await page.content();
+      const $situacao = cheerio.load(situacaoHtml);
+      const textoSituacao = $situacao('body').text();
+
+      // Não encontrado
+      if (
+        /não foi encontrad|Nenhum resultado|inscrição.*inválida/i.test(
+          textoSituacao,
+        )
+      ) {
+        await browser.close();
+        return {
+          success: false,
+          status: CndStatus.ERROR,
+          issueDate: null,
+          expirationDate: null,
+          protocolNumber: null,
+          pdfBuffer: null,
+          message: 'CNPJ não encontrado no sistema da Caixa',
+        };
+      }
+
+      const regular = /está\s+REGULAR\s+perante\s+o\s+FGTS/i.test(
+        textoSituacao,
       );
+      const irregular = /IRREGULAR|pendência/i.test(textoSituacao);
 
-      // Preenche o CNPJ
-      await page.fill(
-        'input[id*="inscricao"], input[name*="inscricao"]',
-        cnpjLimpo,
-      );
+      if (irregular && !regular) {
+        await browser.close();
+        return {
+          success: true,
+          status: CndStatus.POSITIVE,
+          issueDate: new Date(),
+          expirationDate: null,
+          protocolNumber: null,
+          pdfBuffer: null,
+          message: 'CRF Irregular - Há pendências com o FGTS',
+        };
+      }
 
-      // Verifica se há CAPTCHA
-      const captchaElement = await page.$(
-        'img[id*="captcha"], div[class*="captcha"], iframe[src*="recaptcha"]',
-      );
-
-      if (captchaElement) {
-        this.logger.warn('CAPTCHA detectado no portal FGTS');
-
+      if (!regular) {
         await browser.close();
         return {
           success: false,
@@ -311,25 +353,115 @@ export class CndIntegrationService {
           expirationDate: null,
           protocolNumber: null,
           pdfBuffer: null,
-          message: 'Portal FGTS requer CAPTCHA - consulta manual necessária',
+          message: 'Não foi possível determinar a situação do empregador',
         };
       }
 
-      // Clica no botão de consulta
-      await page.click(
-        'button[id*="consultar"], input[type="submit"][value*="Consultar"]',
+      // 3) Clica no link "Certificado de Regularidade do FGTS - CRF"
+      const linkCertificado = await page.$(
+        'a:has-text("Certificado de Regularidade do FGTS")',
       );
+      if (!linkCertificado) {
+        await browser.close();
+        return {
+          success: false,
+          status: CndStatus.PENDING,
+          issueDate: null,
+          expirationDate: null,
+          protocolNumber: null,
+          pdfBuffer: null,
+          message: 'Empresa regular, mas link do certificado não encontrado',
+        };
+      }
 
-      // Aguarda resultado
-      await page.waitForLoadState('networkidle', { timeout: 30000 });
+      await Promise.all([
+        page
+          .waitForLoadState('networkidle', { timeout: 30000 })
+          .catch(() => null),
+        linkCertificado.click(),
+      ]);
+      await page.waitForTimeout(1500);
 
-      const content = await page.content();
-      const $ = cheerio.load(content);
+      // 4) Página com dados do CRF - extrai validade e número antes de visualizar
+      const crfHtml = await page.content();
+      const $crf = cheerio.load(crfHtml);
+      const textoCrf = $crf('body').text();
 
-      const resultado = this.parseFGTSResult($, page);
+      let dataEmissao: Date | null = null;
+      let dataValidade: Date | null = null;
+      let protocolo: string | null = null;
+
+      const validadeMatch = textoCrf.match(
+        /Validade:\s*(\d{2}\/\d{2}\/\d{4})\s*a\s*(\d{2}\/\d{2}\/\d{4})/i,
+      );
+      if (validadeMatch) {
+        dataEmissao = this.parseBrDate(validadeMatch[1]);
+        dataValidade = this.parseBrDate(validadeMatch[2]);
+      }
+
+      const numeroMatch = textoCrf.match(
+        /Certificado\s+Número:\s*([0-9]{10,})/i,
+      );
+      if (numeroMatch) {
+        protocolo = numeroMatch[1];
+      }
+
+      // 5) Clica em "Visualizar" - abre a tela final imprimível em nova aba
+      const btnVisualizar = await page.$(
+        'input[name="mainForm:btnVisualizar"]',
+      );
+      let pdfBuffer: Buffer | null = null;
+
+      if (btnVisualizar) {
+        const [popup] = await Promise.all([
+          context.waitForEvent('page', { timeout: 15000 }).catch(() => null),
+          btnVisualizar.click(),
+        ]);
+
+        const paginaCertificado = popup ?? page;
+        await paginaCertificado
+          .waitForLoadState('networkidle', { timeout: 30000 })
+          .catch(() => null);
+        await paginaCertificado.waitForTimeout(1500);
+
+        // Gera PDF da página final do certificado
+        try {
+          pdfBuffer = Buffer.from(
+            await paginaCertificado.pdf({
+              format: 'A4',
+              printBackground: true,
+              margin: {
+                top: '10mm',
+                bottom: '10mm',
+                left: '10mm',
+                right: '10mm',
+              },
+            }),
+          );
+        } catch (pdfError) {
+          this.logger.warn(
+            `Falha ao gerar PDF do CRF via page.pdf(): ${pdfError instanceof Error ? pdfError.message : 'erro'}`,
+          );
+        }
+      }
 
       await browser.close();
-      return resultado;
+
+      if (!dataEmissao) dataEmissao = new Date();
+      if (!dataValidade) {
+        dataValidade = new Date();
+        dataValidade.setDate(dataValidade.getDate() + 30);
+      }
+
+      return {
+        success: true,
+        status: CndStatus.VALID,
+        issueDate: dataEmissao,
+        expirationDate: dataValidade,
+        protocolNumber: protocolo,
+        pdfBuffer,
+        message: 'CRF Regular - Empresa em dia com o FGTS',
+      };
     } catch (error) {
       this.logger.error(
         `Erro na consulta CRF: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
@@ -348,133 +480,9 @@ export class CndIntegrationService {
     }
   }
 
-  private async parseFGTSResult(
-    $: cheerio.CheerioAPI,
-    page: Page,
-  ): Promise<CndResult> {
-    // Verifica se o CRF está regular
-    const regular =
-      $('*:contains("REGULAR")').length > 0 ||
-      $('*:contains("regular")').length > 0;
-
-    const irregular =
-      $('*:contains("IRREGULAR")').length > 0 ||
-      $('*:contains("irregular")').length > 0 ||
-      $('*:contains("pendência")').length > 0;
-
-    const naoEncontrado =
-      $('*:contains("não foi encontrad")').length > 0 ||
-      $('*:contains("Nenhum resultado")').length > 0;
-
-    if (naoEncontrado) {
-      return {
-        success: false,
-        status: CndStatus.ERROR,
-        issueDate: null,
-        expirationDate: null,
-        protocolNumber: null,
-        pdfBuffer: null,
-        message: 'CNPJ não encontrado no sistema da Caixa',
-      };
-    }
-
-    let pdfBuffer: Buffer | null = null;
-    let protocolo: string | null = null;
-    let dataEmissao: Date | null = null;
-    let dataValidade: Date | null = null;
-
-    // Busca número do CRF
-    const protocoloMatch = $('body')
-      .text()
-      .match(/(?:CRF|Protocolo|Número)[:\s]*(\d{4,}[\d./-]*\d)/i);
-    if (protocoloMatch) {
-      protocolo = protocoloMatch[1];
-    }
-
-    // Busca data de emissão
-    const dataEmissaoMatch = $('body')
-      .text()
-      .match(/(?:Emissão|Data)[:\s]*(\d{2}\/\d{2}\/\d{4})/i);
-    if (dataEmissaoMatch) {
-      const [dia, mes, ano] = dataEmissaoMatch[1].split('/');
-      dataEmissao = new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
-    }
-
-    // Busca data de validade
-    const dataValidadeMatch = $('body')
-      .text()
-      .match(/(?:Válido até|Validade)[:\s]*(\d{2}\/\d{2}\/\d{4})/i);
-    if (dataValidadeMatch) {
-      const [dia, mes, ano] = dataValidadeMatch[1].split('/');
-      dataValidade = new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
-    }
-
-    // Tenta baixar PDF
-    try {
-      const downloadButton = await page.$(
-        'a:has-text("PDF"), a:has-text("Imprimir"), button:has-text("Gerar")',
-      );
-      if (downloadButton) {
-        const [download] = await Promise.all([
-          page.waitForEvent('download', { timeout: 10000 }).catch(() => null),
-          downloadButton.click(),
-        ]);
-
-        if (download) {
-          const path = await download.path();
-          if (path) {
-            const fs = await import('fs/promises');
-            pdfBuffer = await fs.readFile(path);
-          }
-        }
-      }
-    } catch {
-      this.logger.warn('Não foi possível baixar o PDF do CRF');
-    }
-
-    if (!dataEmissao) {
-      dataEmissao = new Date();
-    }
-
-    // CRF tem validade de 30 dias
-    if (!dataValidade) {
-      dataValidade = new Date();
-      dataValidade.setDate(dataValidade.getDate() + 30);
-    }
-
-    if (regular) {
-      return {
-        success: true,
-        status: CndStatus.VALID,
-        issueDate: dataEmissao,
-        expirationDate: dataValidade,
-        protocolNumber: protocolo,
-        pdfBuffer,
-        message: 'CRF Regular - Empresa em dia com o FGTS',
-      };
-    }
-
-    if (irregular) {
-      return {
-        success: true,
-        status: CndStatus.POSITIVE,
-        issueDate: dataEmissao,
-        expirationDate: null,
-        protocolNumber: protocolo,
-        pdfBuffer: null,
-        message: 'CRF Irregular - Há pendências com o FGTS',
-      };
-    }
-
-    return {
-      success: false,
-      status: CndStatus.PENDING,
-      issueDate: null,
-      expirationDate: null,
-      protocolNumber: null,
-      pdfBuffer: null,
-      message: 'Não foi possível determinar o resultado da consulta',
-    };
+  private parseBrDate(value: string): Date {
+    const [dia, mes, ano] = value.split('/');
+    return new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
   }
 
   // ─── Consultar CND Federal (Receita Federal / PGFN) ─────────────────────────
