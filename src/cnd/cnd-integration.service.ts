@@ -4,12 +4,16 @@ import { chromium, Browser, Page } from 'playwright';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import * as cheerio from 'cheerio';
 import * as forge from 'node-forge';
-
-chromiumExtra.use(StealthPlugin());
+import { spawn } from 'child_process';
+import { writeFile, mkdtemp, rm } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { PrismaService } from '../database/index.js';
 import { StorageService } from '../storage/storage.service.js';
 import { CertificatesService } from '../certificates/certificates.service.js';
 import { CndType, CndStatus } from '../../generated/prisma/enums.js';
+
+chromiumExtra.use(StealthPlugin());
 
 interface CndResult {
   success: boolean;
@@ -33,6 +37,77 @@ export class CndIntegrationService {
 
   // ─── Consultar CNDT (TST - Justiça do Trabalho) ─────────────────────────────
 
+  /**
+   * Resolve o captcha visual do CNDT via Python+EasyOCR.
+   * Pipeline:
+   *   1. Salva imagem em arquivo temp
+   *   2. Spawn `python3 scripts/ocr-segmented.py <path>`
+   *   3. Captura texto reconhecido em stdout
+   *
+   * Por que Python: o captcha tem círculos sobrepostos que derrotam OCR
+   * tradicional (Tesseract). EasyOCR (PyTorch) com segmentação por
+   * connected-components + opening morfológico atinge ~20% por tentativa,
+   * suficiente para acertar em 5-10 retries.
+   */
+  private solveCaptchaCNDT(imageBuf: Buffer): Promise<string> {
+    return new Promise(async (resolve) => {
+      const dir = await mkdtemp(join(tmpdir(), 'cndt-captcha-'));
+      const imgPath = join(dir, 'captcha.png');
+
+      try {
+        await writeFile(imgPath, imageBuf);
+
+        // ocr-segmented.py é deployado junto do código no Railway
+        const scriptPath = join(process.cwd(), 'scripts', 'ocr-segmented.py');
+        const proc = spawn('python3', [scriptPath, imgPath]);
+
+        let stdout = '';
+        let stderr = '';
+
+        proc.stdout.on('data', (c) => (stdout += c.toString()));
+        proc.stderr.on('data', (c) => (stderr += c.toString()));
+
+        const timeout = setTimeout(() => {
+          proc.kill('SIGKILL');
+          this.logger.warn('OCR Python timeout 30s');
+          resolve('');
+        }, 30000);
+
+        proc.on('close', (code) => {
+          clearTimeout(timeout);
+          void rm(dir, { recursive: true, force: true });
+
+          if (code !== 0) {
+            this.logger.warn(
+              `OCR Python exit=${code} stderr=${stderr.slice(-200)}`,
+            );
+            resolve('');
+            return;
+          }
+
+          const text = stdout
+            .trim()
+            .replace(/[^a-z0-9]/gi, '')
+            .toLowerCase();
+          resolve(text);
+        });
+
+        proc.on('error', (err) => {
+          clearTimeout(timeout);
+          void rm(dir, { recursive: true, force: true });
+          this.logger.error(`Falha ao executar Python OCR: ${err.message}`);
+          resolve('');
+        });
+      } catch (err) {
+        void rm(dir, { recursive: true, force: true });
+        this.logger.error(
+          `Erro setup OCR: ${err instanceof Error ? err.message : 'desconhecido'}`,
+        );
+        resolve('');
+      }
+    });
+  }
+
   async consultarCNDT(cnpj: string): Promise<CndResult> {
     const cnpjLimpo = cnpj.replace(/\D/g, '');
     if (cnpjLimpo.length !== 14) {
@@ -40,6 +115,7 @@ export class CndIntegrationService {
     }
 
     let browser: Browser | null = null;
+    const MAX_TENTATIVAS = 10;
 
     try {
       this.logger.log(`Iniciando consulta CNDT para CNPJ: ${cnpjLimpo}`);
@@ -52,54 +128,131 @@ export class CndIntegrationService {
       const context = await browser.newContext({
         userAgent:
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        viewport: { width: 1280, height: 720 },
+        viewport: { width: 1280, height: 900 },
+        acceptDownloads: true,
       });
 
       const page = await context.newPage();
 
-      // Acessa a página de consulta
-      await page.goto('https://cndt-certidao.tst.jus.br/inicio.faces', {
-        waitUntil: 'networkidle',
-        timeout: 30000,
-      });
+      for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
+        this.logger.log(`CNDT tentativa ${tentativa}/${MAX_TENTATIVAS}`);
 
-      // Aguarda o formulário carregar
-      await page.waitForSelector('input[id*="cpfCnpj"]', { timeout: 10000 });
+        await page.goto(
+          'https://cndt-certidao.tst.jus.br/gerarCertidao.faces',
+          { waitUntil: 'networkidle', timeout: 30000 },
+        );
 
-      // Preenche o CNPJ
-      await page.fill('input[id*="cpfCnpj"]', cnpjLimpo);
+        await page.waitForSelector('input[id="gerarCertidaoForm:cpfCnpj"]', {
+          timeout: 15000,
+        });
+        await page.fill('input[id="gerarCertidaoForm:cpfCnpj"]', cnpjLimpo);
 
-      // Clica no botão de consulta
-      const submitButton = await page.$(
-        'input[type="submit"][value*="Consultar"], button[id*="btnConsultar"]',
-      );
-      if (submitButton) {
-        await submitButton.click();
-      } else {
-        // Tenta encontrar o botão de outra forma
-        await page.click(
-          'button:has-text("Consultar"), input[value*="Consultar"]',
+        // Aguarda o captcha carregar com base64 válido (JSF renderiza via AJAX)
+        const captchaSrc = await page
+          .waitForFunction(
+            () => {
+              const img = document.querySelector(
+                'img[id="idImgBase64"]',
+              ) as HTMLImageElement | null;
+              return img?.src && img.src.includes('base64,') ? img.src : null;
+            },
+            { timeout: 10000 },
+          )
+          .then((h) => h.jsonValue() as Promise<string | null>)
+          .catch(() => null);
+
+        if (!captchaSrc || !captchaSrc.includes('base64,')) {
+          this.logger.warn('Captcha base64 não apareceu em 10s');
+          continue;
+        }
+
+        const captchaBuf = Buffer.from(
+          captchaSrc.split('base64,')[1],
+          'base64',
+        );
+
+        const captchaTexto = await this.solveCaptchaCNDT(captchaBuf);
+        this.logger.log(`Captcha OCR: "${captchaTexto}"`);
+
+        if (captchaTexto.length < 4) {
+          this.logger.warn(
+            `Captcha curto (${captchaTexto.length} chars), recarregando`,
+          );
+          continue;
+        }
+
+        await page.fill('input[id="idCampoResposta"]', captchaTexto);
+
+        // Clica e aguarda download do PDF (TST baixa direto quando captcha está certo)
+        const downloadPromise = page
+          .waitForEvent('download', { timeout: 15000 })
+          .catch(() => null);
+        await page.click('input[id="gerarCertidaoForm:btnEmitirCertidao"]');
+
+        const download = await downloadPromise;
+
+        if (download) {
+          const tmpPath = await download.path();
+          if (tmpPath) {
+            const fs = await import('fs/promises');
+            const pdfBuffer = await fs.readFile(tmpPath);
+
+            // CNDT vale 180 dias; metadados detalhados estão no PDF
+            const issueDate = new Date();
+            const expirationDate = new Date();
+            expirationDate.setDate(expirationDate.getDate() + 180);
+
+            return {
+              success: true,
+              status: CndStatus.VALID,
+              issueDate,
+              expirationDate,
+              protocolNumber: null,
+              pdfBuffer,
+              message:
+                'Certidão Negativa de Débitos Trabalhistas emitida com sucesso',
+            };
+          }
+        }
+
+        // Sem download → captcha errado OU certidão positiva
+        await page.waitForTimeout(1500);
+        const html = (await page.content()).toLowerCase();
+
+        if (
+          /consta no banco nacional|inadimplente|certid[aã]o positiva/.test(
+            html,
+          )
+        ) {
+          return {
+            success: true,
+            status: CndStatus.POSITIVE,
+            issueDate: new Date(),
+            expirationDate: null,
+            protocolNumber: null,
+            pdfBuffer: null,
+            message: 'Certidão Positiva - há débitos trabalhistas',
+          };
+        }
+
+        this.logger.warn(
+          `Captcha rejeitado tentativa ${tentativa}/${MAX_TENTATIVAS}`,
         );
       }
 
-      // Aguarda resultado
-      await page.waitForLoadState('networkidle', { timeout: 30000 });
-
-      // Verifica se há resultado
-      const content = await page.content();
-      const $ = cheerio.load(content);
-
-      // Verifica diferentes cenários de resultado
-      const resultado = this.parseTSTResult($, page);
-
-      await browser.close();
-      return resultado;
+      return {
+        success: false,
+        status: CndStatus.ERROR,
+        issueDate: null,
+        expirationDate: null,
+        protocolNumber: null,
+        pdfBuffer: null,
+        message: `Falha após ${MAX_TENTATIVAS} tentativas de captcha`,
+      };
     } catch (error) {
       this.logger.error(
         `Erro na consulta CNDT: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
       );
-      if (browser) await browser.close();
-
       return {
         success: false,
         status: CndStatus.ERROR,
@@ -109,147 +262,9 @@ export class CndIntegrationService {
         pdfBuffer: null,
         message: `Erro na consulta: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
       };
+    } finally {
+      if (browser) await browser.close();
     }
-  }
-
-  private async parseTSTResult(
-    $: cheerio.CheerioAPI,
-    page: Page,
-  ): Promise<CndResult> {
-    // Verifica se a certidão é negativa (empresa sem débitos)
-    const certidaoNegativa =
-      $('*:contains("CERTIDÃO NEGATIVA")').length > 0 ||
-      $('*:contains("certidão negativa")').length > 0;
-
-    const certidaoPositiva =
-      $('*:contains("CERTIDÃO POSITIVA")').length > 0 ||
-      $('*:contains("certidão positiva")').length > 0;
-
-    const naoEncontrado =
-      $('*:contains("não foi encontrad")').length > 0 ||
-      $('*:contains("Nenhum resultado")').length > 0;
-
-    if (naoEncontrado) {
-      return {
-        success: false,
-        status: CndStatus.ERROR,
-        issueDate: null,
-        expirationDate: null,
-        protocolNumber: null,
-        pdfBuffer: null,
-        message: 'CNPJ não encontrado no sistema do TST',
-      };
-    }
-
-    // Tenta extrair informações da certidão
-    let pdfBuffer: Buffer | null = null;
-    let protocolo: string | null = null;
-    let dataEmissao: Date | null = null;
-    let dataValidade: Date | null = null;
-
-    // Busca número do protocolo
-    const protocoloMatch = $('body')
-      .text()
-      .match(/(?:Código|Protocolo|Número)[:\s]*(\d{4,}[\d./-]*\d)/i);
-    if (protocoloMatch) {
-      protocolo = protocoloMatch[1];
-    }
-
-    // Busca data de emissão
-    const dataEmissaoMatch = $('body')
-      .text()
-      .match(/(?:Emitida em|Emissão|Data)[:\s]*(\d{2}\/\d{2}\/\d{4})/i);
-    if (dataEmissaoMatch) {
-      const [dia, mes, ano] = dataEmissaoMatch[1].split('/');
-      dataEmissao = new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
-    }
-
-    // Busca data de validade
-    const dataValidadeMatch = $('body')
-      .text()
-      .match(/(?:Válida até|Validade)[:\s]*(\d{2}\/\d{2}\/\d{4})/i);
-    if (dataValidadeMatch) {
-      const [dia, mes, ano] = dataValidadeMatch[1].split('/');
-      dataValidade = new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
-    }
-
-    // Tenta fazer download do PDF se disponível
-    try {
-      const downloadButton = await page.$(
-        'a:has-text("PDF"), a:has-text("Download"), a:has-text("Imprimir"), button:has-text("PDF")',
-      );
-      if (downloadButton) {
-        const [download] = await Promise.all([
-          page.waitForEvent('download', { timeout: 10000 }).catch(() => null),
-          downloadButton.click(),
-        ]);
-
-        if (download) {
-          const path = await download.path();
-          if (path) {
-            const fs = await import('fs/promises');
-            pdfBuffer = await fs.readFile(path);
-          }
-        }
-      }
-    } catch {
-      // Se não conseguir baixar PDF, apenas continua
-      this.logger.warn('Não foi possível baixar o PDF da CNDT');
-    }
-
-    // Se não encontrou data de emissão, usa a data atual
-    if (!dataEmissao) {
-      dataEmissao = new Date();
-    }
-
-    // Se não encontrou data de validade, calcula 180 dias (padrão CNDT)
-    if (!dataValidade) {
-      dataValidade = new Date();
-      dataValidade.setDate(dataValidade.getDate() + 180);
-    }
-
-    if (certidaoNegativa) {
-      return {
-        success: true,
-        status: CndStatus.VALID,
-        issueDate: dataEmissao,
-        expirationDate: dataValidade,
-        protocolNumber: protocolo,
-        pdfBuffer,
-        message:
-          'Certidão Negativa de Débitos Trabalhistas emitida com sucesso',
-      };
-    }
-
-    if (certidaoPositiva) {
-      // Verifica se é positiva com efeito de negativa
-      const efeitoNegativa = $('*:contains("efeito de negativa")').length > 0;
-
-      return {
-        success: true,
-        status: efeitoNegativa
-          ? CndStatus.POSITIVE_NEGATIVE
-          : CndStatus.POSITIVE,
-        issueDate: dataEmissao,
-        expirationDate: dataValidade,
-        protocolNumber: protocolo,
-        pdfBuffer,
-        message: efeitoNegativa
-          ? 'Certidão Positiva com Efeito de Negativa emitida'
-          : 'Certidão Positiva - há débitos pendentes',
-      };
-    }
-
-    // Se chegou aqui, não conseguiu determinar o resultado
-    return {
-      success: false,
-      status: CndStatus.PENDING,
-      issueDate: null,
-      expirationDate: null,
-      protocolNumber: null,
-      pdfBuffer: null,
-      message: 'Não foi possível determinar o resultado da consulta',
-    };
   }
 
   // ─── Consultar CRF (FGTS - Caixa) ───────────────────────────────────────────
