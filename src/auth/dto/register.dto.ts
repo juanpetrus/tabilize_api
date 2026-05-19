@@ -3,6 +3,7 @@ import {
   IsEnum,
   IsIn,
   IsNotEmpty,
+  IsOptional,
   IsString,
   MinLength,
 } from 'class-validator';
@@ -34,4 +35,9 @@ export class RegisterDto {
     message: 'O periodo deve ter um dos seguintes valores: MONTH, YEAR',
   })
   billingCycle: string;
+
+  // Slug do parceiro que indicou (capturado do cookie tabilize_ref pelo frontend)
+  @IsOptional()
+  @IsString()
+  partnerSlug?: string;
 }

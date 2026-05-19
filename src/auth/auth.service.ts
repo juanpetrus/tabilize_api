@@ -9,6 +9,7 @@ import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../database';
 import { MailService } from '../mail/mail.service.js';
+import { LeadsService } from '../leads/leads.service.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
@@ -24,6 +25,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly mail: MailService,
+    private readonly leads: LeadsService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -40,7 +42,20 @@ export class AuthService {
     const trialExpiry = new Date();
     trialExpiry.setDate(trialExpiry.getDate() + 14);
 
-    const user = await this.prisma.$transaction(async (tx) => {
+    // Resolve atribuição de parceiro (cookie tabilize_ref → partnerSlug)
+    // Só atribui se o parceiro existe, está ativo e aprovado — caso contrário ignora.
+    let referredByPartnerId: string | null = null;
+    if (dto.partnerSlug) {
+      const partner = await this.prisma.partner.findUnique({
+        where: { slug: dto.partnerSlug },
+        select: { id: true, status: true, isActive: true },
+      });
+      if (partner && partner.isActive && partner.status === 'APPROVED') {
+        referredByPartnerId = partner.id;
+      }
+    }
+
+    const { user, teamId } = await this.prisma.$transaction(async (tx) => {
       const newUser = await tx.user.create({
         data: {
           name: dto.name,
@@ -49,7 +64,7 @@ export class AuthService {
         },
       });
 
-      await tx.team.create({
+      const team = await tx.team.create({
         data: {
           name: dto.teamName,
           ownerId: newUser.id,
@@ -57,16 +72,27 @@ export class AuthService {
           subscriptionStatus: 'TRIAL',
           subscriptionExpiry: trialExpiry,
           billingCycle: dto.billingCycle as BillingCycle,
+          referredByPartnerId,
           members: {
             create: { userId: newUser.id, role: 'OWNER' },
           },
         },
+        select: { id: true },
       });
 
-      return newUser;
+      return { user: newUser, teamId: team.id };
     });
 
     this.mail.sendWelcome(user.email, user.name, trialExpiry).catch(() => null);
+
+    // Auto-converte lead pendente com mesmo email (falha silenciosa)
+    this.leads
+      .autoConvertOnSignup({
+        email: user.email,
+        teamId,
+        partnerId: referredByPartnerId,
+      })
+      .catch(() => null);
 
     const token = this.generateToken(user.id, user.email);
     return this.formatAuthResponse(user, token);

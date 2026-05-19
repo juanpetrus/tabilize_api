@@ -25,6 +25,10 @@ import { FiscalConfigModule } from './fiscal-config/fiscal-config.module.js';
 import { CustomersModule } from './customers/customers.module.js';
 import { ProductsModule } from './products/products.module.js';
 import { NfeModule } from './nfe/nfe.module.js';
+import { PartnerAuthModule } from './partner-auth/index.js';
+import { PartnersModule } from './partners/partners.module.js';
+import { LandingPagesModule } from './landing-pages/landing-pages.module.js';
+import { LeadsModule } from './leads/leads.module.js';
 
 @Module({
   imports: [
@@ -50,6 +54,10 @@ import { NfeModule } from './nfe/nfe.module.js';
     CustomersModule,
     ProductsModule,
     NfeModule,
+    PartnerAuthModule,
+    PartnersModule,
+    LandingPagesModule,
+    LeadsModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: SubscriptionGuard }],

@@ -8,6 +8,10 @@ import {
   subscriptionCancelledTemplate,
   forgotPasswordTemplate,
   nfeToCustomerTemplate,
+  partnerPendingApprovalTemplate,
+  partnerApprovedTemplate,
+  partnerRejectedTemplate,
+  partnerForgotPasswordTemplate,
 } from './mail.templates.js';
 
 const resend = new Resend(process.env['RESEND_API_KEY']);
@@ -74,6 +78,49 @@ export class MailService {
       to,
       subject: 'Redefinir sua senha',
       html: forgotPasswordTemplate(name, resetUrl),
+    });
+  }
+
+  // ─── Partners ───────────────────────────────────────────────────────────
+
+  async sendPartnerPendingApproval(to: string, name: string) {
+    await resend.emails.send({
+      from: FROM,
+      to,
+      subject: 'Cadastro recebido — em análise',
+      html: partnerPendingApprovalTemplate(name),
+    });
+  }
+
+  async sendPartnerApproved(
+    to: string,
+    name: string,
+    slug: string,
+    refUrl: string,
+  ) {
+    await resend.emails.send({
+      from: FROM,
+      to,
+      subject: 'Seu cadastro foi aprovado! 🎉',
+      html: partnerApprovedTemplate(name, slug, refUrl),
+    });
+  }
+
+  async sendPartnerRejected(to: string, name: string, reason: string) {
+    await resend.emails.send({
+      from: FROM,
+      to,
+      subject: 'Sobre seu cadastro como parceiro',
+      html: partnerRejectedTemplate(name, reason),
+    });
+  }
+
+  async sendPartnerForgotPassword(to: string, name: string, resetUrl: string) {
+    await resend.emails.send({
+      from: FROM,
+      to,
+      subject: 'Redefinir senha do painel de parceiro',
+      html: partnerForgotPasswordTemplate(name, resetUrl),
     });
   }
 

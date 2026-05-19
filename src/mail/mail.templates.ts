@@ -166,6 +166,69 @@ export function forgotPasswordTemplate(name: string, resetUrl: string): string {
   `);
 }
 
+export function partnerPendingApprovalTemplate(name: string): string {
+  return layout(`
+    ${badge('Programa de Parceiros')}
+    ${heading(`Olá, ${name}! 👋`)}
+    ${paragraph('Recebemos seu cadastro no Programa de Parceiros da Tabilize.')}
+    ${paragraph('Nossa equipe vai analisar suas informações em breve. Assim que sua conta for aprovada, você receberá um email com o link de indicação personalizado e o acesso ao painel.')}
+    ${infoBox(`
+      <p style="margin:0;font-size:13px;color:#52525b;line-height:1.6;">Enquanto isso, fique de olho na sua caixa de entrada. A análise costuma levar até 48 horas úteis.</p>
+    `)}
+    ${divider()}
+    ${paragraph('<span style="font-size:13px;color:#a1a1aa;">Qualquer dúvida, responda este email.</span>')}
+  `);
+}
+
+export function partnerApprovedTemplate(
+  name: string,
+  slug: string,
+  refUrl: string,
+): string {
+  return layout(`
+    ${badge('Parceiro aprovado', '#16a34a')}
+    ${heading(`Bem-vindo ao Programa de Parceiros 🎉`)}
+    ${paragraph(`Olá, ${name}! Sua conta de parceiro foi aprovada.`)}
+    ${paragraph('Use o link abaixo nas suas divulgações. Toda nova conta criada a partir dele fica vinculada a você automaticamente.')}
+    ${infoBox(`
+      <p style="margin:0 0 4px;font-size:13px;font-weight:600;color:#18181b;">Seu link de indicação</p>
+      <p style="margin:0;font-size:14px;color:#52525b;font-family:monospace;word-break:break-all;">${refUrl}</p>
+      <p style="margin:8px 0 0;font-size:12px;color:#a1a1aa;">Código: <strong>${slug}</strong></p>
+    `)}
+    ${button('Acessar painel de parceiro', `${BASE_URL}/parceiro`)}
+    ${divider()}
+    ${paragraph('<span style="font-size:13px;color:#a1a1aa;">No painel você encontra materiais de divulgação, acompanhamento de comissões e suas indicações ativas.</span>')}
+  `);
+}
+
+export function partnerRejectedTemplate(name: string, reason: string): string {
+  return layout(`
+    ${badge('Cadastro não aprovado', '#dc2626')}
+    ${heading('Sobre seu cadastro como parceiro')}
+    ${paragraph(`Olá, ${name}! Analisamos sua solicitação para entrar no Programa de Parceiros da Tabilize e, neste momento, não conseguimos aprovar seu cadastro.`)}
+    ${infoBox(`
+      <p style="margin:0 0 4px;font-size:13px;font-weight:600;color:#18181b;">Motivo</p>
+      <p style="margin:0;font-size:14px;color:#52525b;line-height:1.6;">${reason}</p>
+    `)}
+    ${paragraph('Se quiser conversar sobre essa decisão ou enviar novas informações, é só responder este email.')}
+  `);
+}
+
+export function partnerForgotPasswordTemplate(
+  name: string,
+  resetUrl: string,
+): string {
+  return layout(`
+    ${badge('Redefinição de senha')}
+    ${heading('Esqueceu sua senha de parceiro?')}
+    ${paragraph(`Olá, ${name}! Recebemos uma solicitação para redefinir a senha da sua conta de parceiro.`)}
+    ${paragraph('Clique no botão abaixo para criar uma nova senha. Este link expira em <strong style="color:#18181b;">1 hora</strong>.')}
+    ${button('Redefinir senha', resetUrl)}
+    ${divider()}
+    ${paragraph('<span style="font-size:13px;color:#a1a1aa;">Se você não solicitou a redefinição, ignore este email.</span>')}
+  `);
+}
+
 export function nfeToCustomerTemplate(params: {
   customerName: string;
   emitenteNome: string;

@@ -249,15 +249,19 @@ model User {
   email                String    @unique
   password             String
   isActive             Boolean   @default(true)
+  isSuperAdmin         Boolean   @default(false)
   passwordResetToken   String?
   passwordResetExpiry  DateTime?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
-  ownedTeams    Team[]       @relation("TeamOwner")
-  teamMembers   TeamMember[]
-  createdTasks  Task[]       @relation("TaskCreator")
-  assignedTasks Task[]       @relation("TaskAssignee")
+  ownedTeams       Team[]         @relation("TeamOwner")
+  teamMembers      TeamMember[]
+  createdTasks     Task[]         @relation("TaskCreator")
+  assignedTasks    Task[]         @relation("TaskAssignee")
+  approvedPartners Partner[]      @relation("PartnerApprovedBy")
+  assignedLeads    Lead[]         @relation("LeadAssignedTo")
+  leadActivities   LeadActivity[] @relation("LeadActivityCreator")
 }
 
 // ─── Planos ───────────────────────────────────────────────────────────────────
@@ -292,16 +296,21 @@ model Team {
   subscriptionId     String?
   customerId         String?
   subscriptionExpiry DateTime?
+  referredByPartnerId String?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  owner     User         @relation("TeamOwner", fields: [ownerId], references: [id])
-  plan      Plan?        @relation(fields: [planId], references: [id])
-  members   TeamMember[]
-  companies Company[]
-  boards     Board[]
-  tasks      Task[]
-  driveItems DriveItem[]
+  owner             User         @relation("TeamOwner", fields: [ownerId], references: [id])
+  plan              Plan?        @relation(fields: [planId], references: [id])
+  members           TeamMember[]
+  companies         Company[]
+  boards            Board[]
+  tasks             Task[]
+  driveItems        DriveItem[]
+  referredByPartner Partner?     @relation("PartnerReferrals", fields: [referredByPartnerId], references: [id])
+  convertedFromLead Lead?        @relation("LeadConverted")
+
+  @@index([referredByPartnerId])
 }
 
 model TeamMember {
@@ -1266,4 +1275,175 @@ model NfeInutilizacao {
   @@unique([companyId, serie, numeroInicial, numeroFinal, ano])
   @@index([companyId])
 }
+
+// ─── Programa de Parceiros ────────────────────────────────────────────────────
+
+enum PartnerStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum PartnerMaterialType {
+  PDF
+  VIDEO
+  LINK
+  MARKDOWN
+}
+
+model Partner {
+  id                  String        @id @default(uuid())
+  name                String
+  email               String        @unique
+  password            String
+  phone               String?
+  document            String?       // CPF ou CNPJ
+  slug                String        @unique         // tabilize.com.br/ref/:slug
+  commissionPct       Decimal       @default(20) @db.Decimal(5, 2)
+  status              PartnerStatus @default(PENDING)
+  approvedAt          DateTime?
+  approvedById        String?
+  rejectedReason      String?
+  clicks              Int           @default(0)
+  passwordResetToken  String?
+  passwordResetExpiry DateTime?
+  isActive            Boolean       @default(true)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  approvedBy     User?  @relation("PartnerApprovedBy", fields: [approvedById], references: [id])
+  referredTeams  Team[] @relation("PartnerReferrals")
+  leads          Lead[]
+
+  @@index([status])
+  @@index([slug])
+}
+
+model PartnerMaterial {
+  id          String              @id @default(uuid())
+  title       String
+  description String?
+  type        PartnerMaterialType
+  url         String?             // R2 key/URL (PDF/VIDEO) ou link externo (LINK)
+  content     String?             @db.Text   // markdown inline (MARKDOWN)
+  order       Int                 @default(0)
+  isActive    Boolean             @default(true)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([isActive, order])
+}
+
+model LandingPage {
+  id          String   @id @default(uuid())
+  title       String                 // "Página para contadores PJ"
+  description String?
+  url         String                 // URL externa completa (ex: https://tabilize.com.br/lp/contadores)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  leads Lead[]
+
+  @@index([isActive])
+}
+
+// ─── Leads / Pipeline Comercial ───────────────────────────────────────────────
+
+enum LeadSource {
+  PARTNER_LINK
+  LANDING_PAGE
+  INTEGRATION
+  LINKEDIN
+  GOOGLE_ADS
+  ORGANIC
+  REFERRAL
+  MANUAL
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  PROPOSAL
+  NEGOTIATING
+  CONVERTED
+  LOST
+  DISQUALIFIED
+}
+
+enum LeadActivityType {
+  NOTE
+  EMAIL
+  CALL
+  MEETING
+  STATUS_CHANGE
+}
+
+model Lead {
+  id          String   @id @default(uuid())
+
+  // identificação
+  name        String?
+  email       String?
+  phone       String?
+  companyName String?
+  cnpj        String?
+
+  // origem
+  source        LeadSource
+  sourceData    Json?
+  partnerId     String?
+  landingPageId String?
+
+  // marketing
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  utmTerm     String?
+  utmContent  String?
+  referrerUrl String?
+
+  // pipeline
+  status       LeadStatus @default(NEW)
+  assignedToId String?
+  notes        String?    @db.Text
+
+  // conversão
+  convertedAt       DateTime?
+  convertedToTeamId String?   @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  partner       Partner?       @relation(fields: [partnerId], references: [id])
+  landingPage   LandingPage?   @relation(fields: [landingPageId], references: [id])
+  assignedTo    User?          @relation("LeadAssignedTo", fields: [assignedToId], references: [id])
+  convertedTeam Team?          @relation("LeadConverted", fields: [convertedToTeamId], references: [id])
+  activities    LeadActivity[]
+
+  @@index([status])
+  @@index([source])
+  @@index([partnerId])
+  @@index([landingPageId])
+  @@index([email])
+  @@index([assignedToId])
+}
+
+model LeadActivity {
+  id          String           @id @default(uuid())
+  leadId      String
+  type        LeadActivityType
+  content     String?          @db.Text
+  metadata    Json?
+  createdById String?
+  createdAt   DateTime         @default(now())
+
+  lead      Lead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("LeadActivityCreator", fields: [createdById], references: [id])
+
+  @@index([leadId, createdAt])
+}
+
 
