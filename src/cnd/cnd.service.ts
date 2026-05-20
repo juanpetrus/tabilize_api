@@ -13,7 +13,6 @@ export class CndService {
   constructor(private readonly prisma: PrismaService) {}
 
   // ─── Staff: Criar/Atualizar CND manualmente ────────────────────────────────
-
   async upsert(
     teamId: string,
     companyId: string,
