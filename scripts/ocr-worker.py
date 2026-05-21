@@ -36,6 +36,51 @@ _ON_RAILWAY = os.path.isdir(_RAILWAY_DEPS)
 if _ON_RAILWAY and _RAILWAY_DEPS not in sys.path:
     sys.path.insert(0, _RAILWAY_DEPS)
 
+
+def _effective_cpus() -> int:
+    """
+    Núcleos REAIS disponíveis ao container — não os do host.
+
+    os.cpu_count() devolve os 48 cores do host Railway, mas o container só tem
+    uma fração (cgroup). Se o torch sobe 48 threads numa vCPU pequena, elas
+    brigam entre si e cada inferência leva 15-20s (foi o que os logs mostraram).
+    Lê o limite do cgroup (v2 e v1); permite override por OCR_THREADS.
+    """
+    env = os.environ.get("OCR_THREADS")
+    if env and env.isdigit() and int(env) > 0:
+        return int(env)
+    # cgroup v2
+    try:
+        with open("/sys/fs/cgroup/cpu.max") as f:
+            quota, period = f.read().split()
+            if quota != "max":
+                return max(1, round(int(quota) / int(period)))
+    except Exception:
+        pass
+    # cgroup v1
+    try:
+        with open("/sys/fs/cgroup/cpu/cpu.cfs_quota_us") as f:
+            quota = int(f.read())
+        with open("/sys/fs/cgroup/cpu/cpu.cfs_period_us") as f:
+            period = int(f.read())
+        if quota > 0:
+            return max(1, round(quota / period))
+    except Exception:
+        pass
+    # Sem limite legível: não estoura — limita a 4 pra evitar oversubscription.
+    return min(os.cpu_count() or 1, 4)
+
+
+# IMPORTANTE: definir as threads ANTES de importar torch (OMP lê na init).
+_OCR_THREADS = _effective_cpus()
+for _v in (
+    "OMP_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+):
+    os.environ.setdefault(_v, str(_OCR_THREADS))
+
 # Reusa a lógica de segmentação + OCR já testada (segment_chars, ocr_one).
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _spec = importlib.util.spec_from_file_location(
@@ -45,6 +90,14 @@ _seg = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_seg)
 
 import easyocr
+import torch
+
+# Reforça o limite em runtime (intra-op do torch + threads do OpenCV).
+torch.set_num_threads(_OCR_THREADS)
+try:
+    _seg.cv2.setNumThreads(_OCR_THREADS)
+except Exception:
+    pass
 
 
 def _build_reader():
@@ -124,7 +177,8 @@ def _log_environment() -> None:
             f"env: on_railway={_ON_RAILWAY} model_dir={_seg._MODEL_DIR} "
             f"py={sys.version.split()[0]} cv2={cv2.__version__} "
             f"numpy={np.__version__} torch={torch.__version__} "
-            f"cpu={os.cpu_count()} torch_threads={torch.get_num_threads()}"
+            f"host_cpu={os.cpu_count()} ocr_threads={_OCR_THREADS} "
+            f"torch_threads={torch.get_num_threads()}"
         )
     except Exception as e:
         _log(f"falha ao logar env: {e}")
