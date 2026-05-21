@@ -19,10 +19,16 @@ Reusa a segmentação + OCR de ocr-segmented.py (arquivo com hífen → importli
 """
 import sys
 import os
+import time
 import importlib.util
 import warnings
 
 warnings.filterwarnings("ignore")
+
+
+def _log(msg: str) -> None:
+    """Log de diagnóstico no stderr (aparece nos logs do Railway)."""
+    print(f"[ocr-worker] {msg}", file=sys.stderr, flush=True)
 
 # No Railway, pacotes pip vão para /app/python-packages (--target).
 _RAILWAY_DEPS = "/app/python-packages"
@@ -75,27 +81,60 @@ def _build_reader():
 
 def _recognize(reader, image_path: str) -> str:
     """Segmenta + OCR de um captcha. Retorna 6 chars ou '' se incompleto."""
+    t_req = time.time()
+    exists = os.path.isfile(image_path)
+    _log(f"request: {image_path} (existe={exists})")
+
+    t0 = time.time()
     chars, _ = _seg.segment_chars(image_path)
+    _log(f"segmentou {len(chars)} chars em {time.time() - t0:.2f}s")
     if not chars:
+        _log("nenhum char segmentado -> retornando vazio")
         return ""
 
     pieces = []
     missing = 0
-    for ch_img in chars:
+    for i, ch_img in enumerate(chars):
+        tc = time.time()
         c = _seg.ocr_one(reader, ch_img)
+        _log(f"  char[{i}] = '{c or '?'}' em {time.time() - tc:.2f}s")
         if c:
             pieces.append(c)
         else:
             pieces.append("?")
             missing += 1
 
+    text = "".join(pieces)
+    _log(
+        f"resultado='{text}' missing={missing} total={time.time() - t_req:.2f}s"
+    )
     # Se faltou algum char, devolve vazio: o Node prefere recarregar o
     # captcha a submeter uma string incompleta.
-    return "" if missing > 0 else "".join(pieces)
+    return "" if missing > 0 else text
+
+
+def _log_environment() -> None:
+    """Loga o ambiente pra comparar dev x prod (achar o que difere)."""
+    try:
+        import cv2
+        import numpy as np
+        import torch
+
+        _log(
+            f"env: on_railway={_ON_RAILWAY} model_dir={_seg._MODEL_DIR} "
+            f"py={sys.version.split()[0]} cv2={cv2.__version__} "
+            f"numpy={np.__version__} torch={torch.__version__} "
+            f"cpu={os.cpu_count()} torch_threads={torch.get_num_threads()}"
+        )
+    except Exception as e:
+        _log(f"falha ao logar env: {e}")
 
 
 def main() -> int:
+    _log_environment()
+    t0 = time.time()
     reader = _build_reader()
+    _log(f"modelo carregado em {time.time() - t0:.2f}s")
     # Sinaliza ao Node que o modelo já está em memória e pronto pra uso.
     print("__READY__", flush=True)
 

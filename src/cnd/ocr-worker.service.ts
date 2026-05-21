@@ -158,8 +158,11 @@ export class OcrWorkerService implements OnModuleDestroy {
 
       proc.stdout.on('data', (c: Buffer) => this.onStdout(c.toString()));
       proc.stderr.on('data', (c: Buffer) => {
-        const s = c.toString().trim();
-        if (s) this.logger.warn(`OCR worker[py]: ${s.slice(-300)}`);
+        // Loga cada linha do worker Python separadamente (diagnóstico no Railway).
+        for (const line of c.toString().split('\n')) {
+          const s = line.trim();
+          if (s) this.logger.log(`py: ${s}`);
+        }
       });
 
       proc.on('error', (err) => {
