@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   Param,
   Patch,
   Post,
@@ -15,6 +16,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CndService } from './cnd.service.js';
 import { CndIntegrationService } from './cnd-integration.service.js';
+import { CndQueueService } from './cnd-queue.service.js';
 import { CreateCndDto } from './dto/create-cnd.dto.js';
 import { UpdateCndDto } from './dto/update-cnd.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
@@ -38,6 +40,7 @@ export class CndController {
   constructor(
     private readonly cndService: CndService,
     private readonly cndIntegration: CndIntegrationService,
+    private readonly cndQueue: CndQueueService,
     private readonly storageService: StorageService,
   ) {}
 
@@ -210,28 +213,32 @@ export class CndController {
   }
 
   /**
-   * Sincronizar uma CND específica via portal (CNDT ou CRF)
+   * Enfileira a sincronização de uma CND via portal (Federal/CNDT/CRF).
+   * Retorna 202: o front acompanha pelo `syncStatus` em /company/:companyId.
    */
   @Post('company/:companyId/sync/:type')
+  @HttpCode(202)
   syncCnd(
     @Param('teamId') teamId: string,
     @Param('companyId') companyId: string,
     @Param('type') type: CndType,
     @Req() req: AuthRequest,
   ) {
-    return this.cndIntegration.syncCnd(teamId, companyId, req.user.id, type);
+    return this.cndQueue.enqueue(teamId, companyId, req.user.id, type);
   }
 
   /**
-   * Sincronizar todas as CNDs disponíveis (CNDT, CRF e Federal se tiver certificado)
+   * Enfileira a sincronização de todas as CNDs disponíveis
+   * (CNDT, CRF e Federal se tiver certificado). Retorna 202.
    */
   @Post('company/:companyId/sync-all')
+  @HttpCode(202)
   syncAllCnds(
     @Param('teamId') teamId: string,
     @Param('companyId') companyId: string,
     @Req() req: AuthRequest,
   ) {
-    return this.cndIntegration.syncAllCnds(teamId, companyId, req.user.id);
+    return this.cndQueue.enqueueAll(teamId, companyId, req.user.id);
   }
 
   /**

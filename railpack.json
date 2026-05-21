@@ -22,10 +22,6 @@
     }
   },
   "deploy": {
-    "inputs": [
-      { "step": "build" },
-      { "step": "install" }
-    ],
     "aptPackages": [
       "libnspr4",
       "libnss3",

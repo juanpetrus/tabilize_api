@@ -73,6 +73,15 @@ enum CndStatus {
   ERROR          // Erro na consulta
 }
 
+// Estado da sincronização automática (consulta via portal) — usado para o
+// fluxo assíncrono via fila. O front faz polling pra mostrar spinner/progresso.
+enum CndSyncStatus {
+  IDLE           // Sem sync em andamento
+  QUEUED         // Na fila, aguardando worker
+  PROCESSING     // Consulta em execução (Playwright + OCR)
+  FAILED         // Última tentativa de sync falhou (ver lastError)
+}
+
 enum LicenseType {
   ALVARA_FUNCIONAMENTO   // Alvará / Licença de Funcionamento (Prefeitura)
   BOMBEIROS_AVCB         // AVCB / CLCB (Corpo de Bombeiros)
@@ -638,6 +647,10 @@ model Cnd {
   autoSync       Boolean   @default(true)  // Sincronizar automaticamente
   lastSyncAt     DateTime?                 // Última tentativa de sync
   lastError      String?                   // Último erro de sync
+
+  // Estado do job de sync assíncrono (fila)
+  syncStatus     CndSyncStatus @default(IDLE)
+  syncStartedAt  DateTime?                 // Quando o worker começou a processar
 
   // Metadados
   isActive       Boolean   @default(true)

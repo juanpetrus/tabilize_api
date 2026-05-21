@@ -29,9 +29,11 @@ import { PartnerAuthModule } from './partner-auth/index.js';
 import { PartnersModule } from './partners/partners.module.js';
 import { LandingPagesModule } from './landing-pages/landing-pages.module.js';
 import { LeadsModule } from './leads/leads.module.js';
+import { QueueModule } from './queue/queue.module.js';
 
 @Module({
   imports: [
+    QueueModule.forRoot(),
     DatabaseModule,
     AuthModule,
     TeamsModule,
