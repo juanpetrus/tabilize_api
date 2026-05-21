@@ -7,6 +7,7 @@ import { PrismaService } from '../database/index.js';
 import { CreateCndDto } from './dto/create-cnd.dto.js';
 import { UpdateCndDto } from './dto/update-cnd.dto.js';
 import { CndStatus } from '../../generated/prisma/enums.js';
+import { Prisma } from '../../generated/prisma/client.js';
 
 @Injectable()
 export class CndService {
@@ -49,13 +50,172 @@ export class CndService {
 
   // ─── Staff: Listar CNDs de uma empresa ─────────────────────────────────────
 
-  async findAllByCompany(teamId: string, companyId: string, userId: string) {
+  async findAllByCompany(
+    teamId: string,
+    companyId: string,
+    userId: string,
+    days: number = 30,
+  ) {
     await this.ensureAccess(teamId, companyId, userId);
 
-    return this.prisma.cnd.findMany({
+    const cnds = await this.prisma.cnd.findMany({
       where: { companyId, isActive: true },
-      orderBy: { type: 'asc' },
+      orderBy: [{ expirationDate: 'asc' }, { type: 'asc' }],
     });
+
+    const { now, limit } = this.getWindow(days);
+    return cnds.map((cnd) => ({
+      ...cnd,
+      category: this.classifyCnd(cnd, now, limit),
+    }));
+  }
+
+  // ─── Staff: Dashboard agregado do escritório (cards do topo) ────────────────
+  // Soma de todas as empresas do team: válidas / a vencer / vencidas / total.
+
+  async getDashboard(teamId: string, userId: string, days: number = 30) {
+    await this.ensureMember(teamId, userId);
+
+    const { now, limit } = this.getWindow(days);
+
+    const cnds = await this.prisma.cnd.findMany({
+      where: { company: { teamId }, isActive: true },
+      select: { status: true, expirationDate: true },
+    });
+
+    let valid = 0;
+    let expiring = 0;
+    let expired = 0;
+    let other = 0;
+
+    for (const cnd of cnds) {
+      switch (this.classifyCnd(cnd, now, limit)) {
+        case 'expired':
+          expired++;
+          break;
+        case 'expiring':
+          expiring++;
+          break;
+        case 'valid':
+          valid++;
+          break;
+        default:
+          other++;
+      }
+    }
+
+    return {
+      total: cnds.length, // todas as certidões
+      valid, // válidas
+      expiring, // a vencer (próximos `days` dias)
+      expired, // vencidas
+      other, // pendentes / positivas / erro
+    };
+  }
+
+  // ─── Staff: Empresas com resumo das certidões (vencidas/válidas/a vencer) ───
+  // Usado para listar as empresas no front; ao clicar usa findAllByCompany.
+
+  async findGroupedByCompany(
+    teamId: string,
+    userId: string,
+    options: {
+      search?: string;
+      page?: number;
+      pageSize?: number;
+      days?: number;
+    } = {},
+  ) {
+    await this.ensureMember(teamId, userId);
+
+    const days = options.days && options.days > 0 ? options.days : 30;
+    const { now, limit } = this.getWindow(days);
+
+    const search = options.search?.trim();
+    const page =
+      Number.isFinite(options.page) && (options.page as number) > 0
+        ? Math.trunc(options.page as number)
+        : 1;
+    const pageSize =
+      Number.isFinite(options.pageSize) && (options.pageSize as number) > 0
+        ? Math.min(100, Math.trunc(options.pageSize as number))
+        : 20;
+
+    const where: Prisma.CompanyWhereInput = {
+      teamId,
+      isActive: true,
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: 'insensitive' } },
+              { cnpj: { contains: search } },
+            ],
+          }
+        : {}),
+    };
+
+    const [total, companies] = await Promise.all([
+      this.prisma.company.count({ where }),
+      this.prisma.company.findMany({
+        where,
+        select: {
+          id: true,
+          name: true,
+          cnpj: true,
+          cnds: {
+            where: { isActive: true },
+            orderBy: [{ expirationDate: 'asc' }, { type: 'asc' }],
+          },
+        },
+        orderBy: { name: 'asc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+
+    const items = companies.map((company) => {
+      let valid = 0;
+      let expiring = 0;
+      let expired = 0;
+      let other = 0;
+
+      for (const cnd of company.cnds) {
+        switch (this.classifyCnd(cnd, now, limit)) {
+          case 'expired':
+            expired++;
+            break;
+          case 'expiring':
+            expiring++;
+            break;
+          case 'valid':
+            valid++;
+            break;
+          default:
+            other++;
+        }
+      }
+
+      return {
+        id: company.id,
+        name: company.name,
+        cnpj: company.cnpj,
+        total: company.cnds.length,
+        valid, // válidas
+        expiring, // a vencer (dentro de `days` dias)
+        expired, // vencidas
+        other, // pendentes / positivas / erro
+      };
+    });
+
+    return {
+      items,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      },
+    };
   }
 
   // ─── Staff: Listar CNDs de todo o escritório ───────────────────────────────
@@ -316,6 +476,48 @@ export class CndService {
       throw new NotFoundException('Arquivo da certidão não disponível');
 
     return { fileUrl: cnd.fileUrl, fileName: cnd.fileName };
+  }
+
+  // ─── Helpers de classificação ──────────────────────────────────────────────
+
+  /** Janela de datas: agora e o limite de "a vencer" (agora + `days`). */
+  private getWindow(days: number) {
+    const now = new Date();
+    const limit = new Date();
+    limit.setDate(now.getDate() + days);
+    return { now, limit };
+  }
+
+  /**
+   * Classifica uma certidão em:
+   * - 'expired'  → vencida (status EXPIRED ou validade já passou)
+   * - 'expiring' → a vencer (válida, mas vence dentro da janela `days`)
+   * - 'valid'    → válida (sem vencimento próximo)
+   * - 'other'    → pendente / positiva / erro
+   */
+  private classifyCnd(
+    cnd: { status: CndStatus; expirationDate: Date | null },
+    now: Date,
+    limit: Date,
+  ): 'expired' | 'expiring' | 'valid' | 'other' {
+    if (
+      cnd.status === CndStatus.EXPIRED ||
+      (cnd.expirationDate && cnd.expirationDate < now)
+    ) {
+      return 'expired';
+    }
+
+    const isValid =
+      cnd.status === CndStatus.VALID ||
+      cnd.status === CndStatus.POSITIVE_NEGATIVE;
+
+    if (!isValid) return 'other';
+
+    if (cnd.expirationDate && cnd.expirationDate <= limit) {
+      return 'expiring';
+    }
+
+    return 'valid';
   }
 
   // ─── Helpers de autorização ────────────────────────────────────────────────

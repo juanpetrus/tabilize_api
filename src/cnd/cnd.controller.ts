@@ -74,15 +74,59 @@ export class CndController {
   }
 
   /**
+   * Dashboard agregado do escritório (cards do topo):
+   * total de certidões válidas / a vencer / vencidas no team inteiro.
+   */
+  @Get('dashboard')
+  getDashboard(
+    @Param('teamId') teamId: string,
+    @Query('days') days: string,
+    @Req() req: AuthRequest,
+  ) {
+    return this.cndService.getDashboard(
+      teamId,
+      req.user.id,
+      days ? parseInt(days) : 30,
+    );
+  }
+
+  /**
+   * Listar empresas com resumo das certidões (vencidas / válidas / a vencer).
+   * Usado para listar as empresas; ao clicar em uma usa-se /company/:companyId.
+   */
+  @Get('by-company')
+  findGroupedByCompany(
+    @Param('teamId') teamId: string,
+    @Req() req: AuthRequest,
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('days') days?: string,
+  ) {
+    return this.cndService.findGroupedByCompany(teamId, req.user.id, {
+      search,
+      page: page ? parseInt(page, 10) : undefined,
+      pageSize: pageSize ? parseInt(pageSize, 10) : undefined,
+      days: days ? parseInt(days, 10) : undefined,
+    });
+  }
+
+  /**
    * Listar CNDs de uma empresa específica
    */
   @Get('company/:companyId')
   findAllByCompany(
     @Param('teamId') teamId: string,
     @Param('companyId') companyId: string,
+    @Query('days') days: string,
     @Req() req: AuthRequest,
   ) {
-    return this.cndService.findAllByCompany(teamId, companyId, req.user.id);
+    return this.cndService.findAllByCompany(
+      teamId,
+      companyId,
+      req.user.id,
+      days ? parseInt(days) : 30,
+    );
   }
 
   /**
