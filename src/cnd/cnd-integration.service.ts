@@ -4,13 +4,10 @@ import { chromium, Browser, Page } from 'playwright';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import * as cheerio from 'cheerio';
 import * as forge from 'node-forge';
-import { spawn } from 'child_process';
-import { writeFile, mkdtemp, rm } from 'fs/promises';
-import { tmpdir } from 'os';
-import { join } from 'path';
 import { PrismaService } from '../database/index.js';
 import { StorageService } from '../storage/storage.service.js';
 import { CertificatesService } from '../certificates/certificates.service.js';
+import { OcrWorkerService } from './ocr-worker.service.js';
 import { CndType, CndStatus } from '../../generated/prisma/enums.js';
 
 chromiumExtra.use(StealthPlugin());
@@ -33,16 +30,18 @@ export class CndIntegrationService {
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     private readonly certificates: CertificatesService,
+    private readonly ocrWorker: OcrWorkerService,
   ) {}
 
   // ─── Consultar CNDT (TST - Justiça do Trabalho) ─────────────────────────────
 
   /**
    * Resolve o captcha visual do CNDT via Python+EasyOCR.
-   * Pipeline:
-   *   1. Salva imagem em arquivo temp
-   *   2. Spawn `python3 scripts/ocr-segmented.py <path>`
-   *   3. Captura texto reconhecido em stdout
+   *
+   * Delega ao OcrWorkerService, que mantém UM processo Python vivo com o
+   * modelo carregado e o reaproveita entre as N tentativas. Isso elimina o
+   * cold-start (import torch + load do modelo) que, ao dar spawn por tentativa,
+   * estourava o timeout de 30s no Railway e fazia o captcha nunca ser lido.
    *
    * Por que Python: o captcha tem círculos sobrepostos que derrotam OCR
    * tradicional (Tesseract). EasyOCR (PyTorch) com segmentação por
@@ -50,62 +49,7 @@ export class CndIntegrationService {
    * suficiente para acertar em 5-10 retries.
    */
   private solveCaptchaCNDT(imageBuf: Buffer): Promise<string> {
-    return new Promise(async (resolve) => {
-      const dir = await mkdtemp(join(tmpdir(), 'cndt-captcha-'));
-      const imgPath = join(dir, 'captcha.png');
-
-      try {
-        await writeFile(imgPath, imageBuf);
-
-        // ocr-segmented.py é deployado junto do código no Railway
-        const scriptPath = join(process.cwd(), 'scripts', 'ocr-segmented.py');
-        const proc = spawn('python3', [scriptPath, imgPath]);
-
-        let stdout = '';
-        let stderr = '';
-
-        proc.stdout.on('data', (c) => (stdout += c.toString()));
-        proc.stderr.on('data', (c) => (stderr += c.toString()));
-
-        const timeout = setTimeout(() => {
-          proc.kill('SIGKILL');
-          this.logger.warn('OCR Python timeout 30s');
-          resolve('');
-        }, 30000);
-
-        proc.on('close', (code) => {
-          clearTimeout(timeout);
-          void rm(dir, { recursive: true, force: true });
-
-          if (code !== 0) {
-            this.logger.warn(
-              `OCR Python exit=${code} stderr=${stderr.slice(-200)}`,
-            );
-            resolve('');
-            return;
-          }
-
-          const text = stdout
-            .trim()
-            .replace(/[^a-z0-9]/gi, '')
-            .toLowerCase();
-          resolve(text);
-        });
-
-        proc.on('error', (err) => {
-          clearTimeout(timeout);
-          void rm(dir, { recursive: true, force: true });
-          this.logger.error(`Falha ao executar Python OCR: ${err.message}`);
-          resolve('');
-        });
-      } catch (err) {
-        void rm(dir, { recursive: true, force: true });
-        this.logger.error(
-          `Erro setup OCR: ${err instanceof Error ? err.message : 'desconhecido'}`,
-        );
-        resolve('');
-      }
-    });
+    return this.ocrWorker.recognize(imageBuf);
   }
 
   async consultarCNDT(cnpj: string): Promise<CndResult> {
