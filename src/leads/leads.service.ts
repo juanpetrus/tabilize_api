@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../database/index.js';
+import { isUUID } from 'class-validator';
 import {
   LeadActivityType,
   LeadSource,
@@ -44,9 +45,11 @@ export class LeadsService {
       }
     }
 
-    // Valida LandingPage se fornecida
+    // Resolve LandingPage só quando o frontend manda o UUID cadastrado.
+    // Quando manda uma chave semântica (ex: "lp_planilha_precificacao"),
+    // guardamos a chave em sourceData mais abaixo.
     let landingPageId: string | null = null;
-    if (dto.landingPageId) {
+    if (dto.landingPageId && isUUID(dto.landingPageId)) {
       const lp = await this.prisma.landingPage.findUnique({
         where: { id: dto.landingPageId },
         select: { id: true, isActive: true },
@@ -56,13 +59,20 @@ export class LeadsService {
       }
     }
 
-    // Define source: PARTNER_LINK se tem partner mas não tem LP, senão LANDING_PAGE
-    const source: LeadSource =
-      landingPageId !== null
-        ? LeadSource.LANDING_PAGE
-        : partnerId !== null
-          ? LeadSource.PARTNER_LINK
-          : LeadSource.ORGANIC;
+    // Dados extras do form da LP que não têm coluna dedicada.
+    const sourceData: Record<string, string> = {};
+    if (dto.clientes) sourceData.clientes = dto.clientes;
+    if (dto.landingPageId && landingPageId === null) {
+      sourceData.landingPageKey = dto.landingPageId;
+    }
+
+    // É lead de LP sempre que veio algum identificador de LP (UUID ou chave);
+    // senão PARTNER_LINK se houver parceiro, senão ORGANIC.
+    const source: LeadSource = dto.landingPageId
+      ? LeadSource.LANDING_PAGE
+      : partnerId !== null
+        ? LeadSource.PARTNER_LINK
+        : LeadSource.ORGANIC;
 
     return this.prisma.lead.create({
       data: {
@@ -72,6 +82,7 @@ export class LeadsService {
         companyName: dto.companyName,
         cnpj: dto.cnpj,
         source,
+        sourceData: Object.keys(sourceData).length ? sourceData : undefined,
         partnerId,
         landingPageId,
         utmSource: dto.utmSource,

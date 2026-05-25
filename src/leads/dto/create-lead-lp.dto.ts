@@ -1,10 +1,4 @@
-import {
-  IsEmail,
-  IsOptional,
-  IsString,
-  IsUUID,
-  MaxLength,
-} from 'class-validator';
+import { IsEmail, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class CreateLeadLpDto {
   @IsOptional()
@@ -27,10 +21,21 @@ export class CreateLeadLpDto {
   @IsString()
   cnpj?: string;
 
-  // ID da LandingPage (cadastrada via /admin/landing-pages)
+  // Identificador da LandingPage: aceita o UUID cadastrado via
+  // /admin/landing-pages OU uma chave semântica da página (ex:
+  // "lp_planilha_precificacao"). Se não for um UUID válido, a chave é
+  // guardada em sourceData.
   @IsOptional()
-  @IsUUID()
+  @IsString()
+  @MaxLength(120)
   landingPageId?: string;
+
+  // Faixa de clientes selecionada no form da LP (ex: "ate_20").
+  // Persistido em sourceData (não há coluna dedicada).
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  clientes?: string;
 
   // Slug do parceiro vindo do cookie tabilize_ref
   @IsOptional()
