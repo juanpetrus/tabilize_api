@@ -271,6 +271,28 @@ export class CndIntegrationService {
       const $situacao = cheerio.load(situacaoHtml);
       const textoSituacao = $situacao('body').text();
 
+      // Mensagem de feedback do portal da Caixa (ex.: "Empregador não cadastrado.")
+      const feedbackText =
+        $situacao('.feedback-text').first().text().trim() ||
+        $situacao('.feedback').first().text().trim();
+
+      // Empregador não cadastrado na base da Caixa — não há CRF a emitir.
+      // Devolve como ERRO de consulta, com a mensagem exata do portal.
+      if (/n[ãa]o\s+cadastrad/i.test(textoSituacao)) {
+        await browser.close();
+        return {
+          success: false,
+          status: CndStatus.ERROR,
+          issueDate: null,
+          expirationDate: null,
+          protocolNumber: null,
+          pdfBuffer: null,
+          message: `Consulta do CRF (FGTS): ${
+            feedbackText || 'Empregador não cadastrado na Caixa'
+          }`,
+        };
+      }
+
       // Não encontrado
       if (
         /não foi encontrad|Nenhum resultado|inscrição.*inválida/i.test(
@@ -285,7 +307,9 @@ export class CndIntegrationService {
           expirationDate: null,
           protocolNumber: null,
           pdfBuffer: null,
-          message: 'CNPJ não encontrado no sistema da Caixa',
+          message: feedbackText
+            ? `Consulta do CRF (FGTS): ${feedbackText}`
+            : 'CNPJ não encontrado no sistema da Caixa',
         };
       }
 
@@ -311,12 +335,14 @@ export class CndIntegrationService {
         await browser.close();
         return {
           success: false,
-          status: CndStatus.PENDING,
+          status: CndStatus.ERROR,
           issueDate: null,
           expirationDate: null,
           protocolNumber: null,
           pdfBuffer: null,
-          message: 'Não foi possível determinar a situação do empregador',
+          message: feedbackText
+            ? `Consulta do CRF (FGTS): ${feedbackText}`
+            : 'Erro na consulta do CRF (FGTS): não foi possível determinar a situação do empregador',
         };
       }
 
