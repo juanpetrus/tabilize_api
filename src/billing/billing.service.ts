@@ -65,7 +65,9 @@ export class BillingService {
       cancelAt: Date | null;
     } | null = null;
 
-    if (team?.subscriptionId) {
+    // Só consulta o Stripe para assinaturas do Stripe (ids "sub_").
+    // Assinaturas do AbacatePay (ids "bill_") usam só o status no Team.
+    if (team?.subscriptionId && team.subscriptionId.startsWith('sub_')) {
       const sub = await stripe.subscriptions.retrieve(team.subscriptionId);
       const item = sub.items.data[0];
       stripeSubscription = {

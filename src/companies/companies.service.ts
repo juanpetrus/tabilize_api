@@ -17,6 +17,7 @@ export class CompaniesService {
 
   async create(teamId: string, userId: string, dto: CreateCompanyDto) {
     await this.ensureTeamMember(teamId, userId);
+    await this.enforceCompanyLimit(teamId);
 
     if (dto.cnpj) {
       const existing = await this.prisma.company.findUnique({
@@ -151,6 +152,11 @@ export class CompaniesService {
 
   async importCsv(teamId: string, userId: string, fileBuffer: Buffer) {
     await this.ensureTeamMember(teamId, userId);
+    await this.enforceCapability(
+      teamId,
+      'csv_import',
+      'A importação por planilha CSV',
+    );
 
     let rows: Record<string, string>[];
 
@@ -165,6 +171,16 @@ export class CompaniesService {
     }
 
     if (rows.length === 0) throw new BadRequestException('Planilha vazia');
+
+    // Limite de empresas do plano: importa até atingir o teto, o resto é pulado.
+    const plan = await this.loadTeamPlan(teamId);
+    const maxCompanies = plan?.maxCompanies ?? null;
+    let activeCount =
+      maxCompanies == null
+        ? 0
+        : await this.prisma.company.count({
+            where: { teamId, isActive: true },
+          });
 
     const imported: string[] = [];
     const skipped: { row: number; name: string; reason: string }[] = [];
@@ -197,10 +213,20 @@ export class CompaniesService {
         }
       }
 
+      if (maxCompanies != null && activeCount >= maxCompanies) {
+        skipped.push({
+          row: i + 2,
+          name,
+          reason: `Limite do plano (${maxCompanies} empresas) atingido`,
+        });
+        continue;
+      }
+
       await this.prisma.company.create({
         data: { teamId, name, cnpj, email, phone, address },
       });
 
+      activeCount++;
       imported.push(name);
     }
 
@@ -347,6 +373,80 @@ export class CompaniesService {
       },
       orderBy: { name: 'asc' },
     });
+  }
+
+  /**
+   * Uso atual de empresas vs. limite do plano (para a UI exibir progresso).
+   * `max: null` = ilimitado.
+   */
+  async getUsage(teamId: string, userId: string) {
+    await this.ensureTeamMember(teamId, userId);
+
+    const plan = await this.loadTeamPlan(teamId);
+    const used = await this.prisma.company.count({
+      where: { teamId, isActive: true },
+    });
+
+    return {
+      companies: {
+        used,
+        max: plan?.maxCompanies ?? null,
+      },
+    };
+  }
+
+  // ─── Enforcement de plano ─────────────────────────────────────────────────
+
+  private async loadTeamPlan(teamId: string) {
+    const team = await this.prisma.team.findUnique({
+      where: { id: teamId },
+      select: {
+        plan: {
+          select: { name: true, maxCompanies: true, capabilities: true },
+        },
+      },
+    });
+
+    return team?.plan ?? null;
+  }
+
+  /**
+   * Bloqueia a criação de empresa quando o team atinge o teto do plano.
+   * Sem plano ou `maxCompanies` nulo → ilimitado.
+   */
+  private async enforceCompanyLimit(teamId: string) {
+    const plan = await this.loadTeamPlan(teamId);
+    if (!plan || plan.maxCompanies == null) return;
+
+    const count = await this.prisma.company.count({
+      where: { teamId, isActive: true },
+    });
+
+    if (count >= plan.maxCompanies) {
+      throw new ForbiddenException({
+        code: 'PLAN_LIMIT_COMPANIES',
+        message: `Seu plano ${plan.name} permite até ${plan.maxCompanies} empresas. Faça upgrade para cadastrar mais.`,
+      });
+    }
+  }
+
+  /**
+   * Exige que o plano do team possua a capability informada.
+   */
+  private async enforceCapability(
+    teamId: string,
+    capability: string,
+    label: string,
+  ) {
+    const plan = await this.loadTeamPlan(teamId);
+    const capabilities = plan?.capabilities ?? [];
+
+    if (!capabilities.includes(capability)) {
+      throw new ForbiddenException({
+        code: 'PLAN_CAPABILITY_REQUIRED',
+        message: `${label} está disponível apenas em planos superiores. Faça upgrade para utilizar.`,
+      });
+    }
   }
 
   private async ensureTeamMember(teamId: string, userId: string) {

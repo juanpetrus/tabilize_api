@@ -69,6 +69,8 @@ export class AuthService {
           name: dto.teamName,
           ownerId: newUser.id,
           planId: dto.planId,
+          document: dto.document,
+          phone: dto.phone,
           subscriptionStatus: 'TRIAL',
           subscriptionExpiry: trialExpiry,
           billingCycle: dto.billingCycle as BillingCycle,

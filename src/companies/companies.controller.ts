@@ -60,6 +60,15 @@ export class CompaniesController {
     return this.companiesService.listAllPortalUsers(teamId, req.user.id);
   }
 
+  /**
+   * Uso de empresas vs. limite do plano.
+   * Declarado antes de `:companyId` para não ser capturado pela rota dinâmica.
+   */
+  @Get('usage')
+  getUsage(@Param('teamId') teamId: string, @Req() req: AuthRequest) {
+    return this.companiesService.getUsage(teamId, req.user.id);
+  }
+
   @Get(':companyId')
   findOne(
     @Param('teamId') teamId: string,
