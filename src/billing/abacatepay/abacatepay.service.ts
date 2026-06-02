@@ -63,6 +63,7 @@ export class AbacatepayService {
       metadata: { teamId, planId, period },
     });
 
+    // Team = espelho legado; Subscription = fonte-de-verdade do acesso.
     await this.prisma.team.update({
       where: { id: teamId },
       data: {
@@ -72,6 +73,18 @@ export class AbacatepayService {
           period === 'yearly' ? BillingCycle.YEAR : BillingCycle.MONTH,
       },
     });
+
+    const current = await this.currentSubscription(teamId);
+    if (current) {
+      await this.prisma.subscription.update({
+        where: { id: current.id },
+        data: {
+          plan: this.planEnumFromId(planId),
+          payCustomerId: customerId,
+          payCheckoutId: billing.id,
+        },
+      });
+    }
 
     return { url: billing.url, subscriptionId: billing.id };
   }
@@ -99,6 +112,18 @@ export class AbacatepayService {
 
     const plan = await this.prisma.plan.findUnique({ where: { id: planId } });
     if (!plan) throw new NotFoundException('Plano não encontrado');
+
+    // Downgrade: o plano-alvo precisa comportar o uso atual. Se tem limite de
+    // empresas (maxCompanies != null) e o team já passou disso, bloqueia.
+    if (plan.maxCompanies != null) {
+      const companies = await this.prisma.company.count({ where: { teamId } });
+      if (companies > plan.maxCompanies) {
+        throw new BadRequestException({
+          code: 'PLAN_DOWNGRADE_INCOMPATIBLE',
+          message: `Seu escritório tem ${companies} empresas, acima do limite de ${plan.maxCompanies} do plano ${plan.name}. Remova empresas ou escolha um plano maior.`,
+        });
+      }
+    }
 
     const productId =
       period === 'yearly' ? plan.idProductYearly : plan.idProductMonthly;
@@ -190,7 +215,10 @@ export class AbacatepayService {
 
     const team = await this.prisma.team.findUnique({
       where: { id: teamId },
-      select: { subscriptionId: true },
+      select: {
+        subscriptionId: true,
+        owner: { select: { name: true, email: true } },
+      },
     });
     if (!team?.subscriptionId) {
       throw new BadRequestException('Nenhuma assinatura ativa encontrada');
@@ -202,6 +230,19 @@ export class AbacatepayService {
       where: { id: teamId },
       data: { subscriptionStatus: 'INACTIVE' },
     });
+    const current = await this.currentSubscription(teamId);
+    if (current) {
+      await this.prisma.subscription.update({
+        where: { id: current.id },
+        data: { status: 'CANCELLED', cancelledAt: new Date() },
+      });
+    }
+
+    if (team.owner) {
+      this.mail
+        .sendSubscriptionCancelled(team.owner.email, team.owner.name, new Date())
+        .catch(() => null);
+    }
 
     return {
       message: 'Assinatura cancelada. O acesso é encerrado imediatamente.',
@@ -280,6 +321,28 @@ export class AbacatepayService {
             ...(shouldPromoteSubsId ? { subscriptionId: subsId } : {}),
           },
         });
+        // Fonte-de-verdade: promove a Subscription para ACTIVE e estende o ciclo.
+        // Renovação bem-sucedida limpa qualquer grace/inadimplência anterior.
+        const activeSub = await this.currentSubscription(team.id);
+        if (activeSub) {
+          await this.prisma.subscription.update({
+            where: { id: activeSub.id },
+            data: {
+              status: 'ACTIVE',
+              currentPeriodStart: new Date(),
+              currentPeriodEnd: expiry,
+              gracePeriodEndsAt: null,
+              ...(subsId ? { paySubscriptionId: subsId } : {}),
+            },
+          });
+          await this.recordPaidInvoice(
+            activeSub.id,
+            team.id,
+            event === 'subscription.completed' ? 'INITIAL' : 'RECURRING',
+            expiry,
+            checkoutId ?? subsId ?? activeSub.id,
+          );
+        }
         if (team.owner) {
           this.mail
             .sendSubscriptionActive(team.owner.email, team.owner.name, expiry)
@@ -292,6 +355,57 @@ export class AbacatepayService {
           where: { id: team.id },
           data: { subscriptionStatus: 'TRIAL' },
         });
+        const trialSub = await this.currentSubscription(team.id);
+        if (trialSub) {
+          await this.prisma.subscription.update({
+            where: { id: trialSub.id },
+            data: { status: 'TRIAL' },
+          });
+        }
+        break;
+      }
+      case 'subscription.plan_changed': {
+        // Troca de plano confirmada pelo AbacatePay. Vem PENDING — só entra em
+        // vigor no PRÓXIMO ciclo (sem cobrança agora). Aqui apenas:
+        //  • promovemos o subs_ definitivo (necessário p/ futuros change-plan), e
+        //  • sincronizamos o plano-alvo pelo productId (cobre também troca feita
+        //    direto no painel do Abacate, fora do nosso fluxo).
+        // NÃO mexemos em status nem criamos Invoice (nada foi cobrado).
+        const productId = (payload.data?.['productId'] as string | undefined) ?? undefined;
+        const targetPlan = productId
+          ? await this.prisma.plan.findFirst({
+              where: {
+                OR: [
+                  { idProductMonthly: productId },
+                  { idProductYearly: productId },
+                ],
+              },
+              select: { id: true },
+            })
+          : null;
+
+        await this.prisma.team.update({
+          where: { id: team.id },
+          data: {
+            ...(subsId && team.subscriptionId !== subsId
+              ? { subscriptionId: subsId }
+              : {}),
+            ...(targetPlan ? { planId: targetPlan.id } : {}),
+          },
+        });
+
+        const changedSub = await this.currentSubscription(team.id);
+        if (changedSub) {
+          await this.prisma.subscription.update({
+            where: { id: changedSub.id },
+            data: {
+              ...(subsId ? { paySubscriptionId: subsId } : {}),
+              ...(targetPlan
+                ? { plan: this.planEnumFromId(targetPlan.id) }
+                : {}),
+            },
+          });
+        }
         break;
       }
       case 'subscription.cancelled': {
@@ -313,6 +427,13 @@ export class AbacatepayService {
           where: { id: team.id },
           data: { subscriptionStatus: 'INACTIVE' },
         });
+        const cancelledSub = await this.currentSubscription(team.id);
+        if (cancelledSub) {
+          await this.prisma.subscription.update({
+            where: { id: cancelledSub.id },
+            data: { status: 'CANCELLED', cancelledAt: new Date() },
+          });
+        }
         if (team.owner) {
           this.mail
             .sendSubscriptionCancelled(
@@ -399,6 +520,78 @@ export class AbacatepayService {
     }
 
     return null;
+  }
+
+  /**
+   * Subscription vigente do team = a mais recente. Troca de plano (cancel +
+   * create) gera uma nova row, então "a última criada" é a corrente.
+   */
+  private currentSubscription(teamId: string) {
+    return this.prisma.subscription.findFirst({
+      where: { teamId },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, paySubscriptionId: true },
+    });
+  }
+
+  private planEnumFromId(
+    planId: string | null | undefined,
+  ): 'STARTER' | 'PRO' | 'ENTERPRISE' {
+    if (planId === 'plan_pro') return 'PRO';
+    if (planId === 'plan_scale') return 'ENTERPRISE';
+    return 'STARTER';
+  }
+
+  /** Valor do ciclo vigente do team (Decimal BRL), derivado do Plan. */
+  private async planAmount(teamId: string): Promise<number> {
+    const team = await this.prisma.team.findUnique({
+      where: { id: teamId },
+      select: {
+        billingCycle: true,
+        plan: { select: { priceMonthly: true, priceYearly: true } },
+      },
+    });
+    const cents =
+      (team?.billingCycle === BillingCycle.YEAR
+        ? team?.plan?.priceYearly
+        : team?.plan?.priceMonthly) ?? 0;
+    return cents / 100;
+  }
+
+  /**
+   * Registra a Invoice de uma cobrança paga (conversão ou renovação).
+   * Idempotente por JANELA DE TEMPO: reentregas do mesmo webhook chegam em
+   * segundos; renovações reais distam ~1 mês. Evita invoice duplicada sem
+   * depender de um event-id estável (que o AbacatePay não expõe de forma
+   * confiável por ciclo).
+   */
+  private async recordPaidInvoice(
+    subscriptionId: string,
+    teamId: string,
+    type: 'INITIAL' | 'RECURRING',
+    expiry: Date,
+    payChargeId: string,
+  ) {
+    const since = new Date(Date.now() - 23 * 3_600_000);
+    const recent = await this.prisma.invoice.findFirst({
+      where: { subscriptionId, createdAt: { gte: since } },
+      select: { id: true },
+    });
+    if (recent) return;
+
+    await this.prisma.invoice.create({
+      data: {
+        subscriptionId,
+        teamId,
+        amount: await this.planAmount(teamId),
+        status: 'PAID',
+        type,
+        dueDate: expiry,
+        paidAt: new Date(),
+        payChargeId,
+        attempt: 1,
+      },
+    });
   }
 
   private nextExpiry(cycle: BillingCycle): Date {

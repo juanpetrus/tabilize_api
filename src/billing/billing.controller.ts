@@ -13,6 +13,8 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { createHmac, timingSafeEqual } from 'node:crypto';
+import type { Request } from 'express';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -22,9 +24,7 @@ import {
 } from '@nestjs/swagger';
 import { BillingService } from './billing.service.js';
 import { AbacatepayService } from './abacatepay/abacatepay.service.js';
-import { CreateCheckoutDto } from './dto/create-checkout.dto.js';
 import { AbacateCheckoutDto } from './dto/abacate-checkout.dto.js';
-import { UpgradeSubscriptionDto } from './dto/upgrade-subscription.dto.js';
 import type { AbacateWebhookPayload } from './abacatepay/abacatepay.types.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 
@@ -60,88 +60,21 @@ export class BillingController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  @Post('teams/:teamId/checkout')
-  @ApiOperation({
-    summary: 'Cria sessão de checkout (Stripe)',
-    description:
-      'Gera a URL de checkout do Stripe para o plano/período informado.',
-  })
-  @ApiParam({ name: 'teamId', description: 'ID do escritório (Team)' })
-  @ApiResponse({ status: 201, description: 'Sessão de checkout criada.' })
-  createCheckout(
-    @Param('teamId') teamId: string,
-    @Req() req: AuthRequest,
-    @Body() dto: CreateCheckoutDto,
-  ) {
-    return this.billingService.createCheckout(
-      teamId,
-      req.user.id,
-      dto.planId,
-      dto.period,
-      dto.name,
-      dto.email,
-    );
-  }
-
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  @Post('teams/:teamId/subscription/reactivate')
-  @ApiOperation({ summary: 'Reativa uma assinatura cancelada' })
-  @ApiParam({ name: 'teamId', description: 'ID do escritório (Team)' })
-  reactivateSubscription(
-    @Param('teamId') teamId: string,
-    @Req() req: AuthRequest,
-  ) {
-    return this.billingService.reactivateSubscription(teamId, req.user.id);
-  }
-
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  @Delete('teams/:teamId/subscription')
-  @ApiOperation({ summary: 'Cancela a assinatura do escritório' })
-  @ApiParam({ name: 'teamId', description: 'ID do escritório (Team)' })
-  cancelSubscription(@Param('teamId') teamId: string, @Req() req: AuthRequest) {
-    return this.billingService.cancelSubscription(teamId, req.user.id);
-  }
-
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
   @Get('teams/:teamId/invoices')
-  @ApiOperation({ summary: 'Lista as faturas do escritório' })
+  @ApiOperation({ summary: 'Histórico de faturas do escritório (paginado)' })
   @ApiParam({ name: 'teamId', description: 'ID do escritório (Team)' })
-  getInvoices(@Param('teamId') teamId: string, @Req() req: AuthRequest) {
-    return this.billingService.getInvoices(teamId, req.user.id);
-  }
-
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  @Patch('teams/:teamId/subscription')
-  @ApiOperation({ summary: 'Faz upgrade/downgrade do plano ou período' })
-  @ApiParam({ name: 'teamId', description: 'ID do escritório (Team)' })
-  upgradeSubscription(
+  getInvoices(
     @Param('teamId') teamId: string,
     @Req() req: AuthRequest,
-    @Body() dto: UpgradeSubscriptionDto,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
   ) {
-    return this.billingService.upgradeSubscription(
+    return this.billingService.getInvoices(
       teamId,
       req.user.id,
-      dto.planId,
-      dto.period,
+      page ? Number(page) : 1,
+      pageSize ? Number(pageSize) : 20,
     );
-  }
-
-  @Post('webhook')
-  @ApiOperation({
-    summary: 'Webhook do Stripe',
-    description:
-      'Endpoint para eventos do Stripe. Valida assinatura via header `stripe-signature`. Body raw.',
-  })
-  webhook(
-    @Req() req: RawBodyRequest<Request>,
-    @Headers('stripe-signature') signature: string,
-  ) {
-    return this.billingService.handleWebhook(req.rawBody!, signature);
   }
 
   // ─── AbacatePay (Pix-first BR) ────────────────────────────────────────────
@@ -214,23 +147,55 @@ export class BillingController {
   }
 
   /**
-   * Webhook do AbacatePay. Verificação pelo secret na query (`?webhookSecret=`),
-   * padrão do provider — o endpoint é cadastrado com o secret embutido na URL.
+   * Webhook do AbacatePay. Duas camadas de verificação (ambas enviadas pelo
+   * provider): (1) `?webhookSecret=` na query e (2) HMAC-SHA256 do corpo cru no
+   * header `X-Webhook-Signature`. A camada HMAC só é exigida quando o header vem.
    */
   @Post('abacate/webhook')
   @ApiOperation({
     summary: 'Webhook do AbacatePay',
     description:
-      'Endpoint chamado pelo AbacatePay. Autenticação via query string `webhookSecret`.',
+      'Endpoint chamado pelo AbacatePay. Verifica `webhookSecret` (query) + HMAC-SHA256 (header X-Webhook-Signature) sobre o corpo cru.',
   })
   abacateWebhook(
     @Query('webhookSecret') secret: string,
+    @Headers('x-webhook-signature') signature: string | undefined,
+    @Req() req: RawBodyRequest<Request>,
     @Body() payload: AbacateWebhookPayload,
   ) {
     const expected = process.env['ABACATEPAY_WEBHOOK_SECRET'] ?? '';
-    if (!expected || secret !== expected) {
+    if (!expected) {
+      throw new ForbiddenException('Webhook secret não configurado');
+    }
+
+    // Camada 1 — secret na query (sempre exigido).
+    if (secret !== expected) {
       throw new ForbiddenException('Webhook secret inválido');
     }
+
+    // Camada 2 — HMAC do corpo cru (quando o provider envia o header).
+    if (signature && !this.verifyHmac(req.rawBody, signature, expected)) {
+      throw new ForbiddenException('Assinatura HMAC inválida');
+    }
+
     return this.abacate.processWebhook(payload);
+  }
+
+  /** HMAC-SHA256 do corpo cru vs. header, comparação timing-safe. */
+  private verifyHmac(
+    rawBody: Buffer | undefined,
+    signature: string,
+    secret: string,
+  ): boolean {
+    if (!rawBody) return false;
+    const expected = createHmac('sha256', secret)
+      .update(rawBody)
+      .digest('hex');
+    const received = Buffer.from(signature.replace(/^sha256=/i, ''), 'hex');
+    const expectedBuf = Buffer.from(expected, 'hex');
+    if (received.length !== expectedBuf.length || received.length === 0) {
+      return false;
+    }
+    return timingSafeEqual(received, expectedBuf);
   }
 }

@@ -8,8 +8,10 @@ import type {
   AbacateBilling,
   AbacateCustomer,
   AbacateEnvelope,
+  AbacatePixCharge,
   AbacateSubscriptionUpdate,
   ChangePlanInput,
+  CreateChargeInput,
   CreateCustomerInput,
   CreateSubscriptionInput,
 } from './abacatepay.types.js';
@@ -57,6 +59,15 @@ export class AbacatepayClient {
       methods: ['CARD'],
       ...input,
     });
+  }
+
+  /**
+   * Cria uma cobrança avulsa via Pix (QR Code). Usada p/ Invoices não-recorrentes
+   * (Pix não recorre — ver spike). Retorna o copia-e-cola + QR em base64.
+   * ⚠️ Endpoint/shape ainda não validados contra o sandbox (pendência do board §03).
+   */
+  createCharge(input: CreateChargeInput): Promise<AbacatePixCharge> {
+    return this.post<AbacatePixCharge>('/pixQrCode/create', input);
   }
 
   /** Cancela a assinatura imediatamente (cancelPolicy NOW, sem carência). */

@@ -44,6 +44,32 @@ export interface AbacateBilling {
   customerId: string | null;
 }
 
+export interface CreateChargeInput {
+  /** Valor da cobrança em centavos. */
+  amount: number;
+  /** Descrição exibida ao pagador. */
+  description?: string;
+  /** Referência idempotente do nosso lado (ex.: invoiceId). */
+  externalId?: string;
+  customerId?: string;
+  metadata?: Record<string, unknown>;
+  /** Minutos até o QR expirar (default do provider se omitido). */
+  expiresIn?: number;
+}
+
+/**
+ * Cobrança avulsa via Pix (QR Code) — usada p/ Invoices não-recorrentes, já que
+ * Pix não recorre (ver spike). id no formato "pix_char_...".
+ */
+export interface AbacatePixCharge {
+  id: string;
+  amount: number; // centavos
+  status: 'PENDING' | 'PAID' | 'EXPIRED' | 'CANCELLED' | 'REFUNDED';
+  brCode: string; // copia-e-cola Pix
+  brCodeBase64: string; // QR Code em data URI
+  expiresAt: string | null; // ISO date
+}
+
 /** Body do POST /subscriptions/change-plan. */
 export interface ChangePlanInput {
   /** ID da assinatura recorrente (`subs_...`). */

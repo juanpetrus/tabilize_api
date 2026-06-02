@@ -23,7 +23,7 @@ async function bootstrap() {
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Tabilize API — Auth & Pagamentos')
     .setDescription(
-      'Documentação dos endpoints de cadastro, login, redefinição de senha e pagamentos (Stripe e AbacatePay).',
+      'Documentação dos endpoints de cadastro, login, redefinição de senha e pagamentos (AbacatePay).',
     )
     .setVersion('1.0')
     .addBearerAuth(
