@@ -322,7 +322,7 @@ model Plan {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  teams Team[]
+  subscriptions Subscription[]
 }
 
 // ─── Billing — Subscription & Invoice (SDD § 4) ─────────────────────────────
@@ -333,7 +333,8 @@ model Plan {
 model Subscription {
   id                 String             @id @default(uuid())
   teamId             String
-  plan               SubscriptionPlan
+  planId             String? // FK → Plan: fonte da verdade dos metadados (limites, preços, productIds)
+  plan               SubscriptionPlan // enum denormalizado p/ conveniência; derivado do planRef
   status             SubscriptionStatus
   trialEndsAt        DateTime // expiração do trial (14 dias após criação)
   currentPeriodStart DateTime
@@ -347,9 +348,11 @@ model Subscription {
   updatedAt          DateTime           @updatedAt
 
   team     Team      @relation(fields: [teamId], references: [id])
+  planRef  Plan?     @relation(fields: [planId], references: [id])
   invoices Invoice[]
 
   @@index([teamId])
+  @@index([planId])
 }
 
 /// Registra cada cobrança gerada: uma invoice por ciclo mensal, na conversão
@@ -381,7 +384,6 @@ model Team {
   name                String
   ownerId             String
   isActive            Boolean      @default(true)
-  planId              String?
   billingCycle        BillingCycle @default(MONTH)
   subscriptionStatus  String       @default("INACTIVE")
   subscriptionId      String?
@@ -394,7 +396,6 @@ model Team {
   updatedAt           DateTime     @updatedAt
 
   owner             User           @relation("TeamOwner", fields: [ownerId], references: [id])
-  plan              Plan?          @relation(fields: [planId], references: [id])
   members           TeamMember[]
   companies         Company[]
   boards            Board[]

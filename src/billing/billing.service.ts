@@ -31,21 +31,10 @@ export class BillingService {
     const team = await this.prisma.team.findUnique({
       where: { id: teamId },
       select: {
-        planId: true,
         subscriptionStatus: true,
         subscriptionExpiry: true,
         subscriptionId: true,
         billingCycle: true,
-        plan: {
-          select: {
-            id: true,
-            name: true,
-            description: true,
-            priceMonthly: true,
-            priceYearly: true,
-            features: true,
-          },
-        },
         // Fonte-de-verdade: a Subscription vigente (a mais recente).
         subscriptions: {
           orderBy: { createdAt: 'desc' },
@@ -56,6 +45,16 @@ export class BillingService {
             currentPeriodEnd: true,
             gracePeriodEndsAt: true,
             cancelledAt: true,
+            planRef: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                priceMonthly: true,
+                priceYearly: true,
+                features: true,
+              },
+            },
           },
         },
       },
@@ -73,7 +72,8 @@ export class BillingService {
       cancelledAt: sub?.cancelledAt ?? null,
       subscriptionId: team?.subscriptionId ?? null,
       billingCycle: team?.billingCycle,
-      current_plan: team?.plan ?? null,
+      // Plano vem exclusivamente da Subscription (fonte-de-verdade).
+      current_plan: sub?.planRef ?? null,
     };
   }
 

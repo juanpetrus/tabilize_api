@@ -69,7 +69,6 @@ export class AuthService {
         data: {
           name: dto.teamName,
           ownerId: newUser.id,
-          planId: dto.planId,
           document: dto.document,
           phone: dto.phone,
           subscriptionStatus: 'TRIAL',
@@ -95,6 +94,7 @@ export class AuthService {
       await tx.subscription.create({
         data: {
           teamId: team.id,
+          planId: dto.planId,
           plan,
           status: 'TRIAL',
           trialEndsAt: trialExpiry,
@@ -237,9 +237,14 @@ export class AuthService {
               select: {
                 id: true,
                 name: true,
-                planId: true,
                 subscriptionStatus: true,
                 subscriptionExpiry: true,
+                // Plano vem da Subscription vigente (fonte-de-verdade).
+                subscriptions: {
+                  orderBy: { createdAt: 'desc' },
+                  take: 1,
+                  select: { planId: true },
+                },
               },
             },
           },
@@ -259,7 +264,10 @@ export class AuthService {
             )
           : null;
 
-      return { role, ...team, trialDaysLeft };
+      const { subscriptions, ...teamRest } = team;
+      const planId = subscriptions[0]?.planId ?? null;
+
+      return { role, ...teamRest, planId, trialDaysLeft };
     });
 
     return { user: { ...user, teamMembers: teams } };

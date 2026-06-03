@@ -173,7 +173,7 @@ export class CompaniesService {
     if (rows.length === 0) throw new BadRequestException('Planilha vazia');
 
     // Limite de empresas do plano: importa até atingir o teto, o resto é pulado.
-    const plan = await this.loadTeamPlan(teamId);
+    const plan = await this.loadActivePlan(teamId);
     const maxCompanies = plan?.maxCompanies ?? null;
     let activeCount =
       maxCompanies == null
@@ -382,7 +382,7 @@ export class CompaniesService {
   async getUsage(teamId: string, userId: string) {
     await this.ensureTeamMember(teamId, userId);
 
-    const plan = await this.loadTeamPlan(teamId);
+    const plan = await this.loadActivePlan(teamId);
     const used = await this.prisma.company.count({
       where: { teamId, isActive: true },
     });
@@ -397,17 +397,22 @@ export class CompaniesService {
 
   // ─── Enforcement de plano ─────────────────────────────────────────────────
 
-  private async loadTeamPlan(teamId: string) {
-    const team = await this.prisma.team.findUnique({
-      where: { id: teamId },
+  /**
+   * Carrega os metadados do plano vigente a partir da Subscription
+   * (fonte-de-verdade — o plano vive exclusivamente na Subscription).
+   */
+  private async loadActivePlan(teamId: string) {
+    const sub = await this.prisma.subscription.findFirst({
+      where: { teamId },
+      orderBy: { createdAt: 'desc' },
       select: {
-        plan: {
+        planRef: {
           select: { name: true, maxCompanies: true, capabilities: true },
         },
       },
     });
 
-    return team?.plan ?? null;
+    return sub?.planRef ?? null;
   }
 
   /**
@@ -415,7 +420,7 @@ export class CompaniesService {
    * Sem plano ou `maxCompanies` nulo → ilimitado.
    */
   private async enforceCompanyLimit(teamId: string) {
-    const plan = await this.loadTeamPlan(teamId);
+    const plan = await this.loadActivePlan(teamId);
     if (!plan || plan.maxCompanies == null) return;
 
     const count = await this.prisma.company.count({
@@ -438,7 +443,7 @@ export class CompaniesService {
     capability: string,
     label: string,
   ) {
-    const plan = await this.loadTeamPlan(teamId);
+    const plan = await this.loadActivePlan(teamId);
     const capabilities = plan?.capabilities ?? [];
 
     if (!capabilities.includes(capability)) {

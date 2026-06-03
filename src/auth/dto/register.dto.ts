@@ -10,6 +10,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { BillingCycle } from 'generated/prisma/enums';
+import { IsCpfOrCnpj } from '../../common/validators/is-cpf-or-cnpj.validator';
 
 export class RegisterDto {
   @ApiProperty({ example: 'João da Silva', description: 'Nome do titular da conta' })
@@ -45,6 +46,9 @@ export class RegisterDto {
   @IsString()
   @Matches(/^\d{11}$|^\d{14}$/, {
     message: 'Documento deve ter 11 dígitos (CPF) ou 14 dígitos (CNPJ)',
+  })
+  @IsCpfOrCnpj({
+    message: 'Documento inválido: informe um CPF ou CNPJ válido',
   })
   document: string;
 

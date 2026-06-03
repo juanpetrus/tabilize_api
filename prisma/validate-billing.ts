@@ -20,7 +20,6 @@ async function main() {
       name: true,
       subscriptionStatus: true,
       subscriptionExpiry: true,
-      planId: true,
       subscriptions: {
         orderBy: { createdAt: 'desc' },
         take: 1,

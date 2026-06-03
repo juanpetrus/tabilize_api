@@ -50,11 +50,13 @@ export class AbacatepayClient {
 
   /** Cria (ou retorna o existente, por taxId) um customer. */
   createCustomer(input: CreateCustomerInput): Promise<AbacateCustomer> {
+    console.log(input);
     return this.post<AbacateCustomer>('/customers/create', input);
   }
 
   /** Cria o checkout de uma assinatura recorrente. Retorna `url` + `id`. */
   createSubscription(input: CreateSubscriptionInput): Promise<AbacateBilling> {
+    console.log('createSubscription', input);
     return this.post<AbacateBilling>('/subscriptions/create', {
       methods: ['CARD'],
       ...input,

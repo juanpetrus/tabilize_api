@@ -63,12 +63,11 @@ export class AbacatepayService {
       metadata: { teamId, planId, period },
     });
 
-    // Team = espelho legado; Subscription = fonte-de-verdade do acesso.
+    // Team guarda só id da assinatura + cadência; o plano vive na Subscription.
     await this.prisma.team.update({
       where: { id: teamId },
       data: {
         subscriptionId: billing.id,
-        planId,
         billingCycle:
           period === 'yearly' ? BillingCycle.YEAR : BillingCycle.MONTH,
       },
@@ -79,6 +78,7 @@ export class AbacatepayService {
       await this.prisma.subscription.update({
         where: { id: current.id },
         data: {
+          planId,
           plan: this.planEnumFromId(planId),
           payCustomerId: customerId,
           payCheckoutId: billing.id,
@@ -161,12 +161,20 @@ export class AbacatepayService {
       quantity: 1,
     });
 
-    // A mudança só entra em vigor no próximo ciclo. Atualizamos planId/ciclo
+    // A mudança só entra em vigor no próximo ciclo. Atualizamos plano/ciclo
     // localmente já — o `subscription.renewed` confirmará no próximo período.
+    // Subscription = fonte-de-verdade; Team = espelho legado.
+    const changing = await this.currentSubscription(teamId);
+    if (changing) {
+      await this.prisma.subscription.update({
+        where: { id: changing.id },
+        data: { planId, plan: this.planEnumFromId(planId) },
+      });
+    }
+
     await this.prisma.team.update({
       where: { id: teamId },
       data: {
-        planId,
         billingCycle:
           period === 'yearly' ? BillingCycle.YEAR : BillingCycle.MONTH,
       },
@@ -193,20 +201,22 @@ export class AbacatepayService {
   async reactivate(teamId: string, userId: string) {
     await this.ensureTeamOwner(teamId, userId);
 
-    const team = await this.prisma.team.findUnique({
-      where: { id: teamId },
-      select: { planId: true, billingCycle: true },
+    // Plano vem da Subscription vigente (fonte-de-verdade); a cadência segue no Team.
+    const sub = await this.prisma.subscription.findFirst({
+      where: { teamId },
+      orderBy: { createdAt: 'desc' },
+      select: { planId: true, team: { select: { billingCycle: true } } },
     });
 
-    if (!team?.planId) {
+    if (!sub?.planId) {
       throw new BadRequestException(
         'Nenhum plano associado. Escolha um plano para assinar.',
       );
     }
 
     const period =
-      team.billingCycle === BillingCycle.YEAR ? 'yearly' : 'monthly';
-    return this.createSubscriptionCheckout(teamId, userId, team.planId, period);
+      sub.team?.billingCycle === BillingCycle.YEAR ? 'yearly' : 'monthly';
+    return this.createSubscriptionCheckout(teamId, userId, sub.planId, period);
   }
 
   /** Cancela a assinatura (imediato no AbacatePay) e marca o team como INACTIVE. */
@@ -384,15 +394,12 @@ export class AbacatepayService {
             })
           : null;
 
-        await this.prisma.team.update({
-          where: { id: team.id },
-          data: {
-            ...(subsId && team.subscriptionId !== subsId
-              ? { subscriptionId: subsId }
-              : {}),
-            ...(targetPlan ? { planId: targetPlan.id } : {}),
-          },
-        });
+        if (subsId && team.subscriptionId !== subsId) {
+          await this.prisma.team.update({
+            where: { id: team.id },
+            data: { subscriptionId: subsId },
+          });
+        }
 
         const changedSub = await this.currentSubscription(team.id);
         if (changedSub) {
@@ -401,7 +408,10 @@ export class AbacatepayService {
             data: {
               ...(subsId ? { paySubscriptionId: subsId } : {}),
               ...(targetPlan
-                ? { plan: this.planEnumFromId(targetPlan.id) }
+                ? {
+                    planId: targetPlan.id,
+                    plan: this.planEnumFromId(targetPlan.id),
+                  }
                 : {}),
             },
           });
@@ -544,17 +554,20 @@ export class AbacatepayService {
 
   /** Valor do ciclo vigente do team (Decimal BRL), derivado do Plan. */
   private async planAmount(teamId: string): Promise<number> {
-    const team = await this.prisma.team.findUnique({
-      where: { id: teamId },
+    // Preço vem da Subscription (fonte-de-verdade); a cadência (mensal/anual)
+    // segue no Team, pois é cadência de cobrança, não plano.
+    const sub = await this.prisma.subscription.findFirst({
+      where: { teamId },
+      orderBy: { createdAt: 'desc' },
       select: {
-        billingCycle: true,
-        plan: { select: { priceMonthly: true, priceYearly: true } },
+        team: { select: { billingCycle: true } },
+        planRef: { select: { priceMonthly: true, priceYearly: true } },
       },
     });
     const cents =
-      (team?.billingCycle === BillingCycle.YEAR
-        ? team?.plan?.priceYearly
-        : team?.plan?.priceMonthly) ?? 0;
+      (sub?.team?.billingCycle === BillingCycle.YEAR
+        ? sub?.planRef?.priceYearly
+        : sub?.planRef?.priceMonthly) ?? 0;
     return cents / 100;
   }
 
