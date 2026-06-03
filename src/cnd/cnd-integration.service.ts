@@ -313,9 +313,8 @@ export class CndIntegrationService {
         };
       }
 
-      const regular = /está\s+REGULAR\s+perante\s+o\s+FGTS/i.test(
-        textoSituacao,
-      );
+      const regular =
+        /est[áa]\s+REGULAR\s+(?:perante\s+o|no)\s+FGTS/i.test(textoSituacao);
       const irregular = /IRREGULAR|pendência/i.test(textoSituacao);
 
       if (irregular && !regular) {
