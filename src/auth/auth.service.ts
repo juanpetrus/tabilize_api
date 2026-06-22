@@ -39,7 +39,8 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(dto.password, this.saltRounds);
 
-    const trialExpiry = new Date();
+    const now = new Date();
+    const trialExpiry = new Date(now);
     trialExpiry.setDate(trialExpiry.getDate() + 14);
 
     // Resolve atribuição de parceiro (cookie tabilize_ref → partnerSlug)
@@ -68,7 +69,8 @@ export class AuthService {
         data: {
           name: dto.teamName,
           ownerId: newUser.id,
-          planId: dto.planId,
+          document: dto.document,
+          phone: dto.phone,
           subscriptionStatus: 'TRIAL',
           subscriptionExpiry: trialExpiry,
           billingCycle: dto.billingCycle as BillingCycle,
@@ -78,6 +80,27 @@ export class AuthService {
           },
         },
         select: { id: true },
+      });
+
+      // Cria a Subscription (modelo SDD) já no cadastro, em TRIAL de 14 dias.
+      // Coexiste com os campos Team.subscription* até o cutover de fonte-de-verdade.
+      const plan =
+        dto.planId === 'plan_pro'
+          ? 'PRO'
+          : dto.planId === 'plan_scale'
+            ? 'ENTERPRISE'
+            : 'STARTER';
+
+      await tx.subscription.create({
+        data: {
+          teamId: team.id,
+          planId: dto.planId,
+          plan,
+          status: 'TRIAL',
+          trialEndsAt: trialExpiry,
+          currentPeriodStart: now,
+          currentPeriodEnd: trialExpiry,
+        },
       });
 
       return { user: newUser, teamId: team.id };
@@ -214,9 +237,14 @@ export class AuthService {
               select: {
                 id: true,
                 name: true,
-                planId: true,
                 subscriptionStatus: true,
                 subscriptionExpiry: true,
+                // Plano vem da Subscription vigente (fonte-de-verdade).
+                subscriptions: {
+                  orderBy: { createdAt: 'desc' },
+                  take: 1,
+                  select: { planId: true },
+                },
               },
             },
           },
@@ -236,7 +264,10 @@ export class AuthService {
             )
           : null;
 
-      return { role, ...team, trialDaysLeft };
+      const { subscriptions, ...teamRest } = team;
+      const planId = subscriptions[0]?.planId ?? null;
+
+      return { role, ...teamRest, planId, trialDaysLeft };
     });
 
     return { user: { ...user, teamMembers: teams } };

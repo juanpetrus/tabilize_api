@@ -57,49 +57,50 @@ enum RecurrenceInterval {
 }
 
 enum CndType {
-  FEDERAL        // CND Federal (Receita/PGFN)
-  ESTADUAL       // CND Estadual (SEFAZ)
-  MUNICIPAL      // CND Municipal (Prefeitura)
-  FGTS           // CRF FGTS (Caixa)
-  TRABALHISTA    // CNDT (TST)
+  FEDERAL // CND Federal (Receita/PGFN)
+  ESTADUAL // CND Estadual (SEFAZ)
+  MUNICIPAL // CND Municipal (Prefeitura)
+  FGTS // CRF FGTS (Caixa)
+  TRABALHISTA // CNDT (TST)
 }
 
 enum CndStatus {
-  VALID          // Certidão válida (negativa)
-  EXPIRED        // Certidão vencida
-  PENDING        // Aguardando consulta
-  POSITIVE       // Certidão positiva (com débitos)
+  VALID // Certidão válida (negativa)
+  EXPIRED // Certidão vencida
+  PENDING // Aguardando consulta
+  POSITIVE // Certidão positiva (com débitos)
   POSITIVE_NEGATIVE // Certidão positiva com efeito de negativa
-  ERROR          // Erro na consulta
+  ERROR // Erro na consulta
+  PROCESSING // Consulta em andamento (já existe no banco via migration add_cnd_processing_status)
 }
 
 // Estado da sincronização automática (consulta via portal) — usado para o
 // fluxo assíncrono via fila. O front faz polling pra mostrar spinner/progresso.
 enum CndSyncStatus {
-  IDLE           // Sem sync em andamento
-  QUEUED         // Na fila, aguardando worker
-  PROCESSING     // Consulta em execução (Playwright + OCR)
-  FAILED         // Última tentativa de sync falhou (ver lastError)
+  IDLE // Sem sync em andamento
+  QUEUED // Na fila, aguardando worker
+  PROCESSING // Consulta em execução (Playwright + OCR)
+  FAILED // Última tentativa de sync falhou (ver lastError)
 }
 
 enum LicenseType {
-  ALVARA_FUNCIONAMENTO   // Alvará / Licença de Funcionamento (Prefeitura)
-  BOMBEIROS_AVCB         // AVCB / CLCB (Corpo de Bombeiros)
-  SANITARIA              // Licença / Alvará Sanitário (Vigilância Sanitária)
-  AMBIENTAL              // Licença Ambiental (LP/LI/LO)
-  INSCRICAO_MUNICIPAL    // CCM / Inscrição Municipal (ISS)
-  INSCRICAO_ESTADUAL     // Inscrição Estadual (ICMS / SEFAZ)
-  JUNTA_COMERCIAL        // Registro na Junta Comercial / NIRE
-  CONSELHO_CLASSE        // Registro em conselho de classe (CRC, CREA, CRM, OAB...)
-  OUTRO                  // Outro tipo — usar o campo `name`
+  ALVARA_FUNCIONAMENTO // Alvará / Licença de Funcionamento (Prefeitura)
+  BOMBEIROS_AVCB // AVCB / CLCB (Corpo de Bombeiros)
+  SANITARIA // Licença / Alvará Sanitário (Vigilância Sanitária)
+  AMBIENTAL // Licença Ambiental (LP/LI/LO)
+  INSCRICAO_MUNICIPAL // CCM / Inscrição Municipal (ISS)
+  INSCRICAO_ESTADUAL // Inscrição Estadual (ICMS / SEFAZ)
+  JUNTA_COMERCIAL // Registro na Junta Comercial / NIRE
+  CONSELHO_CLASSE // Registro em conselho de classe (CRC, CREA, CRM, OAB...)
+  OUTRO // Outro tipo — usar o campo `name`
 }
 
 enum LicenseStatus {
-  PENDING     // Em processo / aguardando emissão
-  ACTIVE      // Vigente
-  EXPIRED     // Vencida
-  SUSPENDED   // Suspensa / em exigência
-  CANCELLED   // Cancelada / baixada
+  PENDING // Em processo / aguardando emissão
+  ACTIVE // Vigente
+  EXPIRED // Vencida
+  SUSPENDED // Suspensa / em exigência
+  CANCELLED // Cancelada / baixada
 }
 
 enum BillingCycle {
@@ -107,51 +108,81 @@ enum BillingCycle {
   YEAR
 }
 
+// ─── Billing & Pagamentos (SDD) ─────────────────────────────────────────────
+
+enum SubscriptionPlan {
+  STARTER
+  PRO
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELLED
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum InvoiceType {
+  INITIAL
+  RECURRING
+  UPGRADE
+  DOWNGRADE_CREDIT
+}
+
 enum EmployeeStatus {
-  ACTIVE           // Ativo
-  DISMISSED        // Demitido
-  ON_LEAVE         // Afastado (licença, férias, etc)
-  VACATION         // Férias
+  ACTIVE // Ativo
+  DISMISSED // Demitido
+  ON_LEAVE // Afastado (licença, férias, etc)
+  VACATION // Férias
 }
 
 enum ContractType {
-  CLT              // Consolidação das Leis do Trabalho
-  PJ               // Pessoa Jurídica
-  INTERN           // Estagiário
-  TEMP             // Temporário
-  APPRENTICE       // Aprendiz
+  CLT // Consolidação das Leis do Trabalho
+  PJ // Pessoa Jurídica
+  INTERN // Estagiário
+  TEMP // Temporário
+  APPRENTICE // Aprendiz
 }
 
 enum DismissalType {
-  WITHOUT_CAUSE    // Sem justa causa
-  WITH_CAUSE       // Com justa causa
-  RESIGNATION      // Pedido de demissão
+  WITHOUT_CAUSE // Sem justa causa
+  WITH_CAUSE // Com justa causa
+  RESIGNATION // Pedido de demissão
   MUTUAL_AGREEMENT // Acordo mútuo (reforma trabalhista)
-  CONTRACT_END     // Término de contrato
+  CONTRACT_END // Término de contrato
 }
 
 enum PayslipItemType {
-  EARNING   // Vencimento/Provento
+  EARNING // Vencimento/Provento
   DEDUCTION // Desconto
 }
 
 // ─── Fiscal: configuração de emissão por empresa ─────────────────────────────
 
 enum Crt {
-  SIMPLES_NACIONAL                   // CRT 1
+  SIMPLES_NACIONAL // CRT 1
   SIMPLES_NACIONAL_EXCESSO_SUBLIMITE // CRT 2
-  REGIME_NORMAL                      // CRT 3 (Lucro Real ou Presumido)
-  MEI                                // CRT 4
+  REGIME_NORMAL // CRT 3 (Lucro Real ou Presumido)
+  MEI // CRT 4
 }
 
 enum RegimeEspecial {
   SEM_REGIME
-  MICROEMPRESA               // ME
-  EMPRESA_PEQUENO_PORTE      // EPP
-  MICROEMPRESA_MUNICIPAL     // ME municipal (ISS)
-  SOCIEDADE_PROFISSIONAIS    // Sociedade uniprofissional (ISS fixo)
-  COOPERATIVA                // Regime tributário de cooperativa
-  ESTIMATIVA                 // Regime de estimativa (ICMS/ISS)
+  MICROEMPRESA // ME
+  EMPRESA_PEQUENO_PORTE // EPP
+  MICROEMPRESA_MUNICIPAL // ME municipal (ISS)
+  SOCIEDADE_PROFISSIONAIS // Sociedade uniprofissional (ISS fixo)
+  COOPERATIVA // Regime tributário de cooperativa
+  ESTIMATIVA // Regime de estimativa (ICMS/ISS)
   PRODUTOR_RURAL
   SUBSTITUTO_TRIBUTARIO
   OUTRO
@@ -180,89 +211,89 @@ enum UsarCstCsosn {
 }
 
 enum AmbienteSefaz {
-  PRODUCAO       // tpAmb=1
-  HOMOLOGACAO    // tpAmb=2
+  PRODUCAO // tpAmb=1
+  HOMOLOGACAO // tpAmb=2
 }
 
 enum TipoContingencia {
   NORMAL
-  SVC_AN         // SEFAZ Virtual de Contingência - Ambiente Nacional
-  SVC_RS         // SEFAZ Virtual de Contingência - RS
-  EPEC           // Evento Prévio de Emissão em Contingência
-  FS_IA          // Formulário de Segurança - Impressor Auxiliar
-  OFFLINE        // Contingência offline (NFC-e)
+  SVC_AN // SEFAZ Virtual de Contingência - Ambiente Nacional
+  SVC_RS // SEFAZ Virtual de Contingência - RS
+  EPEC // Evento Prévio de Emissão em Contingência
+  FS_IA // Formulário de Segurança - Impressor Auxiliar
+  OFFLINE // Contingência offline (NFC-e)
 }
 
 enum TipoPessoa {
-  PF             // Pessoa Física (CPF, 11 dígitos)
-  PJ             // Pessoa Jurídica (CNPJ, 14 dígitos)
+  PF // Pessoa Física (CPF, 11 dígitos)
+  PJ // Pessoa Jurídica (CNPJ, 14 dígitos)
 }
 
 enum IndicadorIeDestinatario {
-  CONTRIBUINTE_ICMS    // 1 - Contribuinte ICMS (informa IE)
-  ISENTO               // 2 - Contribuinte isento de inscrição no cadastro de contribuintes
-  NAO_CONTRIBUINTE     // 9 - Não Contribuinte (pode ou não possuir IE)
+  CONTRIBUINTE_ICMS // 1 - Contribuinte ICMS (informa IE)
+  ISENTO // 2 - Contribuinte isento de inscrição no cadastro de contribuintes
+  NAO_CONTRIBUINTE // 9 - Não Contribuinte (pode ou não possuir IE)
 }
 
 // Origem da mercadoria (campo `orig` na tag CST/CSOSN ICMS) — valores fixos 0-8
 enum MercadoriaOrigem {
-  NACIONAL                                  // 0 - Nacional (exceto 3, 4, 5 e 8)
-  ESTRANGEIRA_IMPORTACAO_DIRETA             // 1 - Estrangeira, importação direta (exceto 6)
-  ESTRANGEIRA_MERCADO_INTERNO               // 2 - Estrangeira, adquirida no mercado interno (exceto 7)
-  NACIONAL_CI_SUPERIOR_40                   // 3 - Nacional, conteúdo importação > 40% e ≤ 70%
-  NACIONAL_PPB                              // 4 - Nacional, produção em conformidade com PPB
-  NACIONAL_CI_INFERIOR_40                   // 5 - Nacional, conteúdo importação ≤ 40%
-  ESTRANGEIRA_IMP_DIRETA_SEM_SIMILAR        // 6 - Estrangeira, importação direta, sem similar nacional (CAMEX)
-  ESTRANGEIRA_MERCADO_INTERNO_SEM_SIMILAR   // 7 - Estrangeira, mercado interno, sem similar nacional (CAMEX)
-  NACIONAL_CI_SUPERIOR_70                   // 8 - Nacional, conteúdo importação > 70%
+  NACIONAL // 0 - Nacional (exceto 3, 4, 5 e 8)
+  ESTRANGEIRA_IMPORTACAO_DIRETA // 1 - Estrangeira, importação direta (exceto 6)
+  ESTRANGEIRA_MERCADO_INTERNO // 2 - Estrangeira, adquirida no mercado interno (exceto 7)
+  NACIONAL_CI_SUPERIOR_40 // 3 - Nacional, conteúdo importação > 40% e ≤ 70%
+  NACIONAL_PPB // 4 - Nacional, produção em conformidade com PPB
+  NACIONAL_CI_INFERIOR_40 // 5 - Nacional, conteúdo importação ≤ 40%
+  ESTRANGEIRA_IMP_DIRETA_SEM_SIMILAR // 6 - Estrangeira, importação direta, sem similar nacional (CAMEX)
+  ESTRANGEIRA_MERCADO_INTERNO_SEM_SIMILAR // 7 - Estrangeira, mercado interno, sem similar nacional (CAMEX)
+  NACIONAL_CI_SUPERIOR_70 // 8 - Nacional, conteúdo importação > 70%
 }
 
 // ─── NF-e emitida — enums ──────────────────────────────────────────────────
 
 enum NfeStatus {
-  RASCUNHO        // Editável; ainda não enviada
-  PROCESSANDO     // Enviada à SEFAZ, aguardando resposta
-  AUTORIZADA      // Autorizada (cStat 100)
-  REJEITADA       // Rejeitada pela SEFAZ
-  DENEGADA        // Denegada (cStat 110)
-  CANCELADA       // Autorizada e depois cancelada por evento
-  INUTILIZADA     // Numeração inutilizada (não chegou a ser autorizada)
+  RASCUNHO // Editável; ainda não enviada
+  PROCESSANDO // Enviada à SEFAZ, aguardando resposta
+  AUTORIZADA // Autorizada (cStat 100)
+  REJEITADA // Rejeitada pela SEFAZ
+  DENEGADA // Denegada (cStat 110)
+  CANCELADA // Autorizada e depois cancelada por evento
+  INUTILIZADA // Numeração inutilizada (não chegou a ser autorizada)
 }
 
 enum NfeFinalidade {
-  NORMAL          // finNFe = 1
-  COMPLEMENTAR    // finNFe = 2
-  AJUSTE          // finNFe = 3
-  DEVOLUCAO       // finNFe = 4
+  NORMAL // finNFe = 1
+  COMPLEMENTAR // finNFe = 2
+  AJUSTE // finNFe = 3
+  DEVOLUCAO // finNFe = 4
 }
 
 enum NfeTipoOperacao {
-  ENTRADA         // tpNF = 0
-  SAIDA           // tpNF = 1
+  ENTRADA // tpNF = 0
+  SAIDA // tpNF = 1
 }
 
 enum NfeModFrete {
-  POR_CONTA_EMITENTE              // 0 (CIF)
-  POR_CONTA_DESTINATARIO          // 1 (FOB)
-  POR_CONTA_TERCEIROS             // 2
-  TRANSPORTE_PROPRIO_EMITENTE     // 3
+  POR_CONTA_EMITENTE // 0 (CIF)
+  POR_CONTA_DESTINATARIO // 1 (FOB)
+  POR_CONTA_TERCEIROS // 2
+  TRANSPORTE_PROPRIO_EMITENTE // 3
   TRANSPORTE_PROPRIO_DESTINATARIO // 4
-  SEM_TRANSPORTE                  // 9
+  SEM_TRANSPORTE // 9
 }
 
 // ─── Auth interna (contador / equipe) ────────────────────────────────────────
 
 model User {
-  id                   String    @id @default(uuid())
-  name                 String
-  email                String    @unique
-  password             String
-  isActive             Boolean   @default(true)
-  isSuperAdmin         Boolean   @default(false)
-  passwordResetToken   String?
-  passwordResetExpiry  DateTime?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  id                  String    @id @default(uuid())
+  name                String
+  email               String    @unique
+  password            String
+  isActive            Boolean   @default(true)
+  isSuperAdmin        Boolean   @default(false)
+  passwordResetToken  String?
+  passwordResetExpiry DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   ownedTeams       Team[]         @relation("TeamOwner")
   teamMembers      TeamMember[]
@@ -276,48 +307,104 @@ model User {
 // ─── Planos ───────────────────────────────────────────────────────────────────
 
 model Plan {
-  id                 String   @id
-  name               String
-  description        String
-  priceMonthly       Int?
-  priceYearly        Int?
-  features           String[]
-  idProductMonthly   String?
-  idProductYearly    String?
-  url                String?
-  isActive           Boolean  @default(true)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id               String   @id
+  name             String
+  description      String
+  priceMonthly     Int?
+  priceYearly      Int?
+  features         String[]
+  maxCompanies     Int? // null = ilimitado
+  capabilities     String[] // chaves machine-readable de features (ex.: "csv_import")
+  idProductMonthly String?
+  idProductYearly  String?
+  url              String?
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  teams Team[]
+  subscriptions Subscription[]
+}
+
+// ─── Billing — Subscription & Invoice (SDD § 4) ─────────────────────────────
+
+/// Entidade central do billing. Cada organização possui exatamente uma
+/// subscription ATIVA por vez (constraint de aplicação — o histórico de
+/// subscriptions canceladas/substituídas permanece como linhas separadas).
+model Subscription {
+  id                 String             @id @default(uuid())
+  teamId             String
+  planId             String? // FK → Plan: fonte da verdade dos metadados (limites, preços, productIds)
+  plan               SubscriptionPlan // enum denormalizado p/ conveniência; derivado do planRef
+  status             SubscriptionStatus
+  trialEndsAt        DateTime // expiração do trial (14 dias após criação)
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  payCustomerId      String? // ID do customer no AbacatePay (null durante trial)
+  paySubscriptionId  String? // ID da subscription no AbacatePay (null durante trial)
+  payCheckoutId      String? // ID do checkout de conversão do trial
+  cancelledAt        DateTime?
+  gracePeriodEndsAt  DateTime? // fim do período de carência pós-vencimento
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  team     Team      @relation(fields: [teamId], references: [id])
+  planRef  Plan?     @relation(fields: [planId], references: [id])
+  invoices Invoice[]
+
+  @@index([teamId])
+  @@index([planId])
+}
+
+/// Registra cada cobrança gerada: uma invoice por ciclo mensal, na conversão
+/// do trial e em retentativas de inadimplência.
+model Invoice {
+  id             String        @id @default(uuid())
+  subscriptionId String
+  teamId         String
+  amount         Decimal       @db.Decimal(10, 2) // valor cobrado (BRL)
+  status         InvoiceStatus
+  type           InvoiceType
+  dueDate        DateTime
+  paidAt         DateTime?
+  payChargeId    String // ID da cobrança no AbacatePay
+  attempt        Int           @default(1) // tentativa de cobrança (começa em 1)
+  createdAt      DateTime      @default(now())
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id])
+  team         Team         @relation(fields: [teamId], references: [id])
+
+  @@index([subscriptionId])
+  @@index([teamId])
 }
 
 // ─── Escritório / Workspace ───────────────────────────────────────────────────
 
 model Team {
-  id                 String    @id @default(uuid())
-  name               String
-  ownerId            String
-  isActive           Boolean   @default(true)
-  planId             String?
-  billingCycle       BillingCycle @default(MONTH)
-  subscriptionStatus String    @default("INACTIVE")
-  subscriptionId     String?
-  customerId         String?
-  subscriptionExpiry DateTime?
+  id                  String       @id @default(uuid())
+  name                String
+  ownerId             String
+  isActive            Boolean      @default(true)
+  billingCycle        BillingCycle @default(MONTH)
+  subscriptionStatus  String       @default("INACTIVE")
+  subscriptionId      String?
+  customerId          String?
+  subscriptionExpiry  DateTime?
+  document            String? // CPF (11) ou CNPJ (14) do titular da assinatura; nullable p/ rows legadas
+  phone               String? // telefone de contato do titular (DDD + número); nullable p/ rows legadas
   referredByPartnerId String?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
 
-  owner             User         @relation("TeamOwner", fields: [ownerId], references: [id])
-  plan              Plan?        @relation(fields: [planId], references: [id])
+  owner             User           @relation("TeamOwner", fields: [ownerId], references: [id])
   members           TeamMember[]
   companies         Company[]
   boards            Board[]
   tasks             Task[]
   driveItems        DriveItem[]
-  referredByPartner Partner?     @relation("PartnerReferrals", fields: [referredByPartnerId], references: [id])
-  convertedFromLead Lead?        @relation("LeadConverted")
+  referredByPartner Partner?       @relation("PartnerReferrals", fields: [referredByPartnerId], references: [id])
+  convertedFromLead Lead?          @relation("LeadConverted")
+  subscriptions     Subscription[]
+  invoices          Invoice[]
 
   @@index([referredByPartnerId])
 }
@@ -340,58 +427,58 @@ model TeamMember {
 // ─── Empresa cliente ─────────────────────────────────────────────────────────
 
 model Company {
-  id        String   @id @default(uuid())
-  teamId    String
-  name      String
-  cnpj      String?  @unique
-  email     String?
-  phone     String?
-  address   String?
+  id            String    @id @default(uuid())
+  teamId        String
+  name          String
+  cnpj          String?   @unique
+  email         String?
+  phone         String?
+  address       String?
   isActive      Boolean   @default(true)
   sefazUltNsu   String?
   sefazLastSync DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  team               Team                 @relation(fields: [teamId], references: [id])
-  companyUsers       CompanyUser[]
-  activeForUsers     CompanyUser[]        @relation("ActiveCompany")
-  companyUserLinks   CompanyUserCompany[] // Usuários do portal com acesso
-  driveShares        DriveItemShare[]
-  tasks              Task[]
-  serviceRequests    ServiceRequest[]
-  payments           Payment[]
-  certificate        CompanyCertificate?
-  sefazNFes          SefazNFe[]
-  sefazEventos       SefazEvento[]
-  cnds               Cnd[]                // Certidões negativas
-  licenses           License[]            // Licenças / legalização (alvarás etc.)
-  employees          Employee[]           // Funcionários
-  fiscalProfile      CompanyFiscalProfile?  // Dados fiscais (IE, IM, CRT, etc.)
-  fiscalAddress      CompanyAddress?        // Endereço fiscal estruturado
-  nfeConfig          CompanyNfeConfig?      // Configuração de emissão NF-e (modelo 55)
-  customers          Customer[]             // Clientes/destinatários
-  products           Product[]              // Produtos/serviços
-  nfes               Nfe[]                  // NF-e emitidas pela empresa
-  nfeInutilizacoes   NfeInutilizacao[]      // Inutilizações de numeração NF-e
+  team             Team                  @relation(fields: [teamId], references: [id])
+  companyUsers     CompanyUser[]
+  activeForUsers   CompanyUser[]         @relation("ActiveCompany")
+  companyUserLinks CompanyUserCompany[] // Usuários do portal com acesso
+  driveShares      DriveItemShare[]
+  tasks            Task[]
+  serviceRequests  ServiceRequest[]
+  payments         Payment[]
+  certificate      CompanyCertificate?
+  sefazNFes        SefazNFe[]
+  sefazEventos     SefazEvento[]
+  cnds             Cnd[] // Certidões negativas
+  licenses         License[] // Licenças / legalização (alvarás etc.)
+  employees        Employee[] // Funcionários
+  fiscalProfile    CompanyFiscalProfile? // Dados fiscais (IE, IM, CRT, etc.)
+  fiscalAddress    CompanyAddress? // Endereço fiscal estruturado
+  nfeConfig        CompanyNfeConfig? // Configuração de emissão NF-e (modelo 55)
+  customers        Customer[] // Clientes/destinatários
+  products         Product[] // Produtos/serviços
+  nfes             Nfe[] // NF-e emitidas pela empresa
+  nfeInutilizacoes NfeInutilizacao[] // Inutilizações de numeração NF-e
 }
 
 // ─── Portal cliente (login da empresa) ───────────────────────────────────────
 
 model CompanyUser {
-  id                 String   @id @default(uuid())
-  companyId          String   // Empresa padrão (backward compatibility)
-  activeCompanyId    String?  // Empresa ativa atual (pode ser diferente da padrão)
-  name               String
-  email              String   @unique
-  password           String
-  isActive           Boolean  @default(true)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id              String   @id @default(uuid())
+  companyId       String // Empresa padrão (backward compatibility)
+  activeCompanyId String? // Empresa ativa atual (pode ser diferente da padrão)
+  name            String
+  email           String   @unique
+  password        String
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  company         Company               @relation(fields: [companyId], references: [id])
-  activeCompany   Company?              @relation("ActiveCompany", fields: [activeCompanyId], references: [id])
-  companies       CompanyUserCompany[]  // Empresas que o usuário pode acessar
+  company         Company              @relation(fields: [companyId], references: [id])
+  activeCompany   Company?             @relation("ActiveCompany", fields: [activeCompanyId], references: [id])
+  companies       CompanyUserCompany[] // Empresas que o usuário pode acessar
   serviceRequests ServiceRequest[]
 }
 
@@ -401,7 +488,7 @@ model CompanyUserCompany {
   id            String   @id @default(uuid())
   companyUserId String
   companyId     String
-  isDefault     Boolean  @default(false)  // Empresa padrão do usuário
+  isDefault     Boolean  @default(false) // Empresa padrão do usuário
   createdAt     DateTime @default(now())
 
   companyUser CompanyUser @relation(fields: [companyUserId], references: [id], onDelete: Cascade)
@@ -416,7 +503,7 @@ model DriveItem {
   id          String  @id @default(uuid())
   teamId      String
   name        String
-  path        String  // "/DAS/2024/Janeiro" ou "/DAS/2024/Janeiro/arquivo.pdf"
+  path        String // "/DAS/2024/Janeiro" ou "/DAS/2024/Janeiro/arquivo.pdf"
   isDirectory Boolean @default(false)
 
   // Metadados do arquivo (quando isDirectory = false)
@@ -473,38 +560,38 @@ model CompanyCertificate {
 // ─── Documentos fiscais SEFAZ ────────────────────────────────────────────────
 
 model SefazNFe {
-  id             String    @id @default(uuid())
-  companyId      String
-  chave          String
-  nsu            String?
-  tipo           String?   // EMITIDA | RECEBIDA
-  status         String    @default("AUTORIZADA") // AUTORIZADA | CANCELADA | DENEGADA
-  emitenteCnpj   String?
-  emitenteIe     String?   // IE do emitente (vem no resNFe e procNFe)
-  emitenteNome   String?
-  destinCnpj     String?
-  destinNome     String?
-  valor          Decimal?  @db.Decimal(15, 2)
-  serie          String?
-  numero         String?
-  dataEmissao    DateTime?
+  id              String    @id @default(uuid())
+  companyId       String
+  chave           String
+  nsu             String?
+  tipo            String? // EMITIDA | RECEBIDA
+  status          String    @default("AUTORIZADA") // AUTORIZADA | CANCELADA | DENEGADA
+  emitenteCnpj    String?
+  emitenteIe      String? // IE do emitente (vem no resNFe e procNFe)
+  emitenteNome    String?
+  destinCnpj      String?
+  destinNome      String?
+  valor           Decimal?  @db.Decimal(15, 2)
+  serie           String?
+  numero          String?
+  dataEmissao     DateTime?
   dataAutorizacao DateTime? // dhRecbto - data de autorização na SEFAZ
-  xmlGzip        String?   @db.Text
-  temXmlCompleto Boolean   @default(false)
-  modelo         String?   // 55 = NF-e | 65 = NFC-e
-  manifestacao   String?   // CIENCIA | CONFIRMADA | DESCONHECIMENTO | NAO_REALIZADA
+  xmlGzip         String?   @db.Text
+  temXmlCompleto  Boolean   @default(false)
+  modelo          String? // 55 = NF-e | 65 = NFC-e
+  manifestacao    String? // CIENCIA | CONFIRMADA | DESCONHECIMENTO | NAO_REALIZADA
 
   // Última tentativa de consulta consChNFe — útil para diagnóstico
   // (ex: cStat=632 indica prazo expirado p/ download do XML)
-  lastSyncAt       DateTime?
-  lastSyncCStat    String?
-  lastSyncXMotivo  String?
+  lastSyncAt      DateTime?
+  lastSyncCStat   String?
+  lastSyncXMotivo String?
 
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  company  Company       @relation(fields: [companyId], references: [id])
-  eventos  SefazEvento[]
+  company Company       @relation(fields: [companyId], references: [id])
+  eventos SefazEvento[]
 
   @@unique([companyId, chave])
 }
@@ -523,8 +610,8 @@ model SefazEvento {
   xmlGzip    String    @db.Text
   createdAt  DateTime  @default(now())
 
-  company Company    @relation(fields: [companyId], references: [id])
-  nfe     SefazNFe?  @relation(fields: [nfeId], references: [id])
+  company Company   @relation(fields: [companyId], references: [id])
+  nfe     SefazNFe? @relation(fields: [nfeId], references: [id])
 
   @@unique([companyId, nsu])
 }
@@ -607,21 +694,21 @@ model ServiceRequest {
 // ─── Cobranças ────────────────────────────────────────────────────────────────
 
 model Payment {
-  id                  String              @id @default(uuid())
-  companyId           String
-  description         String
-  amount              Decimal             @db.Decimal(10, 2)
-  dueDate             DateTime
-  status              PaymentStatus       @default(PENDING)
-  paidAt              DateTime?
-  referenceMonth      String?
-  isRecurring         Boolean             @default(false)
-  recurrenceInterval  RecurrenceInterval?
-  recurrenceEndDate   DateTime?
-  recurrenceGroupId   String?
-  isActive            Boolean             @default(true)
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
+  id                 String              @id @default(uuid())
+  companyId          String
+  description        String
+  amount             Decimal             @db.Decimal(10, 2)
+  dueDate            DateTime
+  status             PaymentStatus       @default(PENDING)
+  paidAt             DateTime?
+  referenceMonth     String?
+  isRecurring        Boolean             @default(false)
+  recurrenceInterval RecurrenceInterval?
+  recurrenceEndDate  DateTime?
+  recurrenceGroupId  String?
+  isActive           Boolean             @default(true)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
   company Company @relation(fields: [companyId], references: [id])
 }
@@ -629,117 +716,117 @@ model Payment {
 // ─── Certidões Negativas de Débitos ──────────────────────────────────────────
 
 model Cnd {
-  id             String    @id @default(uuid())
-  companyId      String
-  type           CndType
-  status         CndStatus @default(PENDING)
+  id        String    @id @default(uuid())
+  companyId String
+  type      CndType
+  status    CndStatus @default(PENDING)
 
   // Dados da certidão
-  issueDate      DateTime?          // Data de emissão
-  expirationDate DateTime?          // Data de validade
-  protocolNumber String?            // Número do protocolo/certidão
+  issueDate      DateTime? // Data de emissão
+  expirationDate DateTime? // Data de validade
+  protocolNumber String? // Número do protocolo/certidão
 
   // Arquivo para download
-  fileUrl        String?            // URL do PDF no S3
-  fileName       String?            // Nome original do arquivo
+  fileUrl  String? // URL do PDF no S3
+  fileName String? // Nome original do arquivo
 
   // Controle de sincronização
-  autoSync       Boolean   @default(true)  // Sincronizar automaticamente
-  lastSyncAt     DateTime?                 // Última tentativa de sync
-  lastError      String?                   // Último erro de sync
+  autoSync   Boolean   @default(true) // Sincronizar automaticamente
+  lastSyncAt DateTime? // Última tentativa de sync
+  lastError  String? // Último erro de sync
 
   // Estado do job de sync assíncrono (fila)
-  syncStatus     CndSyncStatus @default(IDLE)
-  syncStartedAt  DateTime?                 // Quando o worker começou a processar
+  syncStatus    CndSyncStatus @default(IDLE)
+  syncStartedAt DateTime? // Quando o worker começou a processar
 
   // Metadados
-  isActive       Boolean   @default(true)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   company Company @relation(fields: [companyId], references: [id])
 
-  @@unique([companyId, type])  // Uma certidão de cada tipo por empresa
+  @@unique([companyId, type]) // Uma certidão de cada tipo por empresa
   @@index([companyId])
-  @@index([expirationDate])    // Para alertas de vencimento
+  @@index([expirationDate]) // Para alertas de vencimento
 }
 
 // ─── Legalização: Licenças / Alvarás ─────────────────────────────────────────
 
 model License {
-  id             String        @id @default(uuid())
-  companyId      String
-  type           LicenseType
-  name           String                              // texto livre; obrigatório quando type = OUTRO
-  status         LicenseStatus @default(PENDING)
+  id        String        @id @default(uuid())
+  companyId String
+  type      LicenseType
+  name      String // texto livre; obrigatório quando type = OUTRO
+  status    LicenseStatus @default(PENDING)
 
-  issuingBody    String?                             // órgão emissor ("Prefeitura de São Paulo", "Corpo de Bombeiros - SP")
-  number         String?                             // nº do alvará / NIRE / inscrição
-  protocolNumber String?                             // protocolo do processo
-  issueDate      DateTime?                           // data de emissão
-  expirationDate DateTime?                           // validade (null = sem validade definida — ex.: NIRE, inscrições)
+  issuingBody    String? // órgão emissor ("Prefeitura de São Paulo", "Corpo de Bombeiros - SP")
+  number         String? // nº do alvará / NIRE / inscrição
+  protocolNumber String? // protocolo do processo
+  issueDate      DateTime? // data de emissão
+  expirationDate DateTime? // validade (null = sem validade definida — ex.: NIRE, inscrições)
   notes          String?
 
   // Arquivo (no R2, via StorageService)
-  fileUrl        String?
-  fileName       String?
-  mimeType       String?
+  fileUrl  String?
+  fileName String?
+  mimeType String?
 
   // Cadeia de renovação
-  renewedFromId  String?       @unique               // a License anterior que esta renova
-  renewedFrom    License?      @relation("LicenseRenewal", fields: [renewedFromId], references: [id])
-  renewal        License?      @relation("LicenseRenewal")  // a renovação desta (se já foi renovada)
+  renewedFromId String?  @unique // a License anterior que esta renova
+  renewedFrom   License? @relation("LicenseRenewal", fields: [renewedFromId], references: [id])
+  renewal       License? @relation("LicenseRenewal") // a renovação desta (se já foi renovada)
 
   // Metadados
-  isActive       Boolean       @default(true)
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   company Company @relation(fields: [companyId], references: [id])
 
   @@index([companyId])
-  @@index([expirationDate])    // Para alertas de vencimento
+  @@index([expirationDate]) // Para alertas de vencimento
   @@index([companyId, type])
 }
 
 // ─── Funcionários (Folha de Pagamento) ──────────────────────────────────────
 
 model Employee {
-  id            String         @id @default(uuid())
-  companyId     String
+  id        String @id @default(uuid())
+  companyId String
 
   // Dados pessoais
-  name          String
-  cpf           String
-  rg            String?
-  birthDate     DateTime?
-  email         String?
-  phone         String?
-  address       String?
+  name      String
+  cpf       String
+  rg        String?
+  birthDate DateTime?
+  email     String?
+  phone     String?
+  address   String?
 
   // Dados trabalhistas
   admissionDate DateTime
   dismissalDate DateTime?
   dismissalType DismissalType?
-  position      String                 // Cargo
-  department    String?                // Departamento/Setor
-  salary        Decimal       @db.Decimal(10, 2)
-  workCard      String?                // Número CTPS
-  pis           String?                // PIS/PASEP
+  position      String // Cargo
+  department    String? // Departamento/Setor
+  salary        Decimal        @db.Decimal(10, 2)
+  workCard      String? // Número CTPS
+  pis           String? // PIS/PASEP
 
   // Status e tipo de contrato
-  status        EmployeeStatus @default(ACTIVE)
-  contractType  ContractType   @default(CLT)
+  status       EmployeeStatus @default(ACTIVE)
+  contractType ContractType   @default(CLT)
 
   // Metadados
-  notes         String?
-  isActive      Boolean        @default(true)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  notes     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  company       Company        @relation(fields: [companyId], references: [id])
-  payslips      Payslip[]
-  documents     EmployeeDocument[]
+  company   Company            @relation(fields: [companyId], references: [id])
+  payslips  Payslip[]
+  documents EmployeeDocument[]
 
   @@unique([companyId, cpf])
   @@index([companyId])
@@ -749,13 +836,13 @@ model Employee {
 // ─── Documentos do Funcionário ──────────────────────────────────────────────
 
 model EmployeeDocument {
-  id          String   @id @default(uuid())
-  employeeId  String
-  name        String           // Nome do documento (ex: "RG", "CPF", "Contrato")
-  fileUrl     String
-  fileName    String
-  mimeType    String?
-  uploadedAt  DateTime @default(now())
+  id         String   @id @default(uuid())
+  employeeId String
+  name       String // Nome do documento (ex: "RG", "CPF", "Contrato")
+  fileUrl    String
+  fileName   String
+  mimeType   String?
+  uploadedAt DateTime @default(now())
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
@@ -765,31 +852,31 @@ model EmployeeDocument {
 // ─── Holerites / Contracheques ──────────────────────────────────────────────
 
 model Payslip {
-  id              String   @id @default(uuid())
+  id              String @id @default(uuid())
   employeeId      String
-  competenceMonth Int              // Mês de referência (1-12)
-  competenceYear  Int              // Ano de referência
+  competenceMonth Int // Mês de referência (1-12)
+  competenceYear  Int // Ano de referência
 
   // Valores
-  grossSalary     Decimal  @db.Decimal(10, 2)  // Salário bruto
-  netSalary       Decimal  @db.Decimal(10, 2)  // Salário líquido
-  deductions      Decimal? @db.Decimal(10, 2)  // Total de descontos
+  grossSalary Decimal  @db.Decimal(10, 2) // Salário bruto
+  netSalary   Decimal  @db.Decimal(10, 2) // Salário líquido
+  deductions  Decimal? @db.Decimal(10, 2) // Total de descontos
 
   // Bases de cálculo
-  baseInss        Decimal? @db.Decimal(10, 2)  // Base de cálculo INSS
-  baseIrrf        Decimal? @db.Decimal(10, 2)  // Base de cálculo IRRF
-  fgtsValue       Decimal? @db.Decimal(10, 2)  // Valor FGTS do mês
+  baseInss  Decimal? @db.Decimal(10, 2) // Base de cálculo INSS
+  baseIrrf  Decimal? @db.Decimal(10, 2) // Base de cálculo IRRF
+  fgtsValue Decimal? @db.Decimal(10, 2) // Valor FGTS do mês
 
   // Arquivo PDF
-  fileUrl         String
-  fileName        String
+  fileUrl  String
+  fileName String
 
   // Metadados
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employee Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   items    PayslipItem[]
 
   @@unique([employeeId, competenceMonth, competenceYear])
@@ -800,10 +887,10 @@ model Payslip {
 model PayslipItem {
   id          String          @id @default(uuid())
   payslipId   String
-  code        String          // Código da rubrica (ex: "001", "101")
-  description String          // Descrição (ex: "Salário Base", "INSS")
+  code        String // Código da rubrica (ex: "001", "101")
+  description String // Descrição (ex: "Salário Base", "INSS")
   type        PayslipItemType // EARNING ou DEDUCTION
-  reference   String?         // Referência (ex: "30 dias", "11%")
+  reference   String? // Referência (ex: "30 dias", "11%")
   value       Decimal         @db.Decimal(10, 2)
 
   payslip Payslip @relation(fields: [payslipId], references: [id], onDelete: Cascade)
@@ -814,19 +901,19 @@ model PayslipItem {
 // ─── Catálogo CNAE (Classificação Nacional de Atividades Econômicas) ────────
 
 model CnaeCode {
-  codigo       String   @id              // "4711-3/01" (com máscara, formato visual padrão)
-  descricao    String                    // "Comércio varejista de mercadorias..."
+  codigo    String @id // "4711-3/01" (com máscara, formato visual padrão)
+  descricao String // "Comércio varejista de mercadorias..."
 
   // hierarquia denormalizada (origem: API IBGE)
-  secao        String   @db.Char(1)      // "G"
-  secaoDesc    String                    // "Comércio; reparação de veículos..."
-  divisao      String                    // "47"
-  grupo        String                    // "471"
-  classe       String                    // "4711-3"
+  secao     String @db.Char(1) // "G"
+  secaoDesc String // "Comércio; reparação de veículos..."
+  divisao   String // "47"
+  grupo     String // "471"
+  classe    String // "4711-3"
 
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   fiscalProfiles CompanyFiscalProfile[]
 
@@ -837,26 +924,26 @@ model CnaeCode {
 // ─── Configuração fiscal da empresa (1:1 com Company) ──────────────────────
 
 model CompanyFiscalProfile {
-  id                   String              @id @default(uuid())
-  companyId            String              @unique
-  companyCode          String?             // Código interno do contador (ex: "534569")
-  inscricaoEstadual    String?             // IE — aceita texto "ISENTO"
-  inscricaoEstadualST  String?             // IE Substituto Tributário
-  inscricaoMunicipal   String?
-  nomeFantasia         String?
-  cnaePrincipal        String?             // FK para CnaeCode.codigo
-  crt                  Crt?                // CRT 1/2/3/4 — sem default (obrigatório explícito)
-  regimeEspecial       RegimeEspecial      @default(SEM_REGIME)
-  estabelecimento      Estabelecimento?    // MATRIZ/FILIAL — null indica pendência
-  indicadorAtividade   IndicadorAtividade? // null indica pendência
-  produtorRural        Boolean             @default(false)
-  usarCstCsosn         UsarCstCsosn        @default(NAO)
-  isActive             Boolean             @default(true)
-  createdAt            DateTime            @default(now())
-  updatedAt            DateTime            @updatedAt
+  id                  String              @id @default(uuid())
+  companyId           String              @unique
+  companyCode         String? // Código interno do contador (ex: "534569")
+  inscricaoEstadual   String? // IE — aceita texto "ISENTO"
+  inscricaoEstadualST String? // IE Substituto Tributário
+  inscricaoMunicipal  String?
+  nomeFantasia        String?
+  cnaePrincipal       String? // FK para CnaeCode.codigo
+  crt                 Crt? // CRT 1/2/3/4 — sem default (obrigatório explícito)
+  regimeEspecial      RegimeEspecial      @default(SEM_REGIME)
+  estabelecimento     Estabelecimento? // MATRIZ/FILIAL — null indica pendência
+  indicadorAtividade  IndicadorAtividade? // null indica pendência
+  produtorRural       Boolean             @default(false)
+  usarCstCsosn        UsarCstCsosn        @default(NAO)
+  isActive            Boolean             @default(true)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
 
-  company              Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  cnae                 CnaeCode? @relation(fields: [cnaePrincipal], references: [codigo])
+  company Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  cnae    CnaeCode? @relation(fields: [cnaePrincipal], references: [codigo])
 
   @@index([cnaePrincipal])
 }
@@ -864,22 +951,22 @@ model CompanyFiscalProfile {
 // ─── Endereço fiscal estruturado (1:1 com Company) ─────────────────────────
 
 model CompanyAddress {
-  id                 String   @id @default(uuid())
-  companyId          String   @unique
-  logradouro         String?
-  numero             String?
-  complemento        String?
-  bairro             String?
-  cep                String?  // 8 dígitos, sem máscara
-  codIbgeMunicipio   String?  // 7 dígitos — vai como cMun no XML NF-e
-  municipio          String?  // nome do município — vai como xMun
-  uf                 String?  // 2 chars — UF
-  codPais            String?  @default("1058")    // 1058 = Brasil
-  pais               String?  @default("BRASIL")
-  referencia         String?
-  isActive           Boolean  @default(true)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id               String   @id @default(uuid())
+  companyId        String   @unique
+  logradouro       String?
+  numero           String?
+  complemento      String?
+  bairro           String?
+  cep              String? // 8 dígitos, sem máscara
+  codIbgeMunicipio String? // 7 dígitos — vai como cMun no XML NF-e
+  municipio        String? // nome do município — vai como xMun
+  uf               String? // 2 chars — UF
+  codPais          String?  @default("1058") // 1058 = Brasil
+  pais             String?  @default("BRASIL")
+  referencia       String?
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 }
@@ -887,34 +974,34 @@ model CompanyAddress {
 // ─── Configuração NF-e modelo 55 (1:1 com Company) ─────────────────────────
 
 model CompanyNfeConfig {
-  id                          String            @id @default(uuid())
-  companyId                   String            @unique
+  id        String @id @default(uuid())
+  companyId String @unique
 
   // Numeração e série
-  serie                       String            @default("1")  // 1-3 dígitos
-  ultimaNfe                   Int               @default(0)    // último nNF emitido — próximo = +1
+  serie     String @default("1") // 1-3 dígitos
+  ultimaNfe Int    @default(0) // último nNF emitido — próximo = +1
 
   // Tributação no Simples
-  aliquotaCreditoSimples      Decimal?          @db.Decimal(5, 2)  // % crédito Simples Nacional
+  aliquotaCreditoSimples Decimal? @db.Decimal(5, 2) // % crédito Simples Nacional
 
   // DANFE e ambiente
-  danfeSimplificado           Boolean           @default(false)
-  ambiente                    AmbienteSefaz     @default(HOMOLOGACAO)
-  observacoes                 String?           // texto padrão para infCpl
+  danfeSimplificado Boolean       @default(false)
+  ambiente          AmbienteSefaz @default(HOMOLOGACAO)
+  observacoes       String? // texto padrão para infCpl
 
   // Contingência
-  tipoContingencia            TipoContingencia  @default(NORMAL)
-  contingenciaJustificativa   String?           // obrigatório se tipoContingencia != NORMAL (mín. 15 chars — valida no DTO)
-  contingenciaInicio          DateTime?
+  tipoContingencia          TipoContingencia @default(NORMAL)
+  contingenciaJustificativa String? // obrigatório se tipoContingencia != NORMAL (mín. 15 chars — valida no DTO)
+  contingenciaInicio        DateTime?
 
   // Parametrização básica
-  calcularIcmsDesonerado      Boolean           @default(false)
-  incluirFreteBaseIcms        Boolean           @default(true)
-  destacarValorIcmsSt         Boolean           @default(false)
+  calcularIcmsDesonerado Boolean @default(false)
+  incluirFreteBaseIcms   Boolean @default(true)
+  destacarValorIcmsSt    Boolean @default(false)
 
-  isActive                    Boolean           @default(true)
-  createdAt                   DateTime          @default(now())
-  updatedAt                   DateTime          @updatedAt
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 }
@@ -922,19 +1009,19 @@ model CompanyNfeConfig {
 // ─── Catálogo NCM (Nomenclatura Comum do Mercosul) ──────────────────────────
 
 model NcmCode {
-  codigo     String   @id              // 8 dígitos sem máscara (ex: "01012100")
-  descricao  String
+  codigo    String @id // 8 dígitos sem máscara (ex: "01012100")
+  descricao String
 
   // hierarquia (derivada do código)
-  capitulo   String                    // 2 dígitos
-  posicao    String                    // 4 dígitos
-  subposicao String                    // 6 dígitos
+  capitulo   String // 2 dígitos
+  posicao    String // 4 dígitos
+  subposicao String // 6 dígitos
 
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  products   Product[]
+  products Product[]
 
   @@index([capitulo])
   @@index([descricao])
@@ -943,17 +1030,17 @@ model NcmCode {
 // ─── Catálogo CFOP (Código Fiscal de Operações e Prestações) ────────────────
 
 model CfopCode {
-  codigo    String   @id              // 4 dígitos (ex: "5102")
+  codigo    String  @id // 4 dígitos (ex: "5102")
   descricao String
-  natureza  String                    // "ENTRADA" | "SAIDA" (derivado do primeiro dígito)
-  grupo     String                    // primeiro dígito como string ("1","2","3","5","6","7")
-  aplicacao String?                   // descrição complementar opcional
+  natureza  String // "ENTRADA" | "SAIDA" (derivado do primeiro dígito)
+  grupo     String // primeiro dígito como string ("1","2","3","5","6","7")
+  aplicacao String? // descrição complementar opcional
 
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  products  Product[]
+  products Product[]
 
   @@index([grupo])
   @@index([natureza])
@@ -962,37 +1049,37 @@ model CfopCode {
 // ─── Catálogo CST ICMS (Código Situação Tributária) ─────────────────────────
 
 model CstIcmsCode {
-  codigo     String   @id              // 2 dígitos (ex: "00", "10", "20")
+  codigo     String  @id // 2 dígitos (ex: "00", "10", "20")
   descricao  String
   observacao String?
 
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  products   Product[]
+  products Product[]
 }
 
 // ─── Catálogo CSOSN (Código Situação da Operação no Simples Nacional) ───────
 
 model CsosnCode {
-  codigo     String   @id              // 3 dígitos (ex: "101", "102", "201"...)
+  codigo     String  @id // 3 dígitos (ex: "101", "102", "201"...)
   descricao  String
   observacao String?
 
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  products   Product[]
+  products Product[]
 }
 
 // ─── Catálogo IBGE — Municípios brasileiros ─────────────────────────────────
 
 model IbgeMunicipio {
-  codigo    String   @id              // 7 dígitos (ex: "3550308" = São Paulo)
-  nome      String                    // "São Paulo"
-  uf        String   @db.Char(2)      // "SP"
+  codigo String @id // 7 dígitos (ex: "3550308" = São Paulo)
+  nome   String // "São Paulo"
+  uf     String @db.Char(2) // "SP"
 
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -1006,39 +1093,39 @@ model IbgeMunicipio {
 // ─── Clientes/Destinatários (por empresa) ───────────────────────────────────
 
 model Customer {
-  id                  String       @id @default(uuid())
-  companyId           String
+  id        String @id @default(uuid())
+  companyId String
 
   // Dados gerais (PF/PJ)
-  tipoPessoa          TipoPessoa
-  cpfCnpj             String                                // 11 (CPF) ou 14 (CNPJ) dígitos
-  name                String                                // razão social ou nome PF
-  nomeFantasia        String?                               // só PJ
-  inscricaoEstadual   String?                               // só PJ + indicadorIe = CONTRIBUINTE_ICMS
-  indicadorIe         IndicadorIeDestinatario @default(NAO_CONTRIBUINTE)
-  inscricaoSuframa    String?                               // zonas francas
-  email               String?
-  phone               String?
+  tipoPessoa        TipoPessoa
+  cpfCnpj           String // 11 (CPF) ou 14 (CNPJ) dígitos
+  name              String // razão social ou nome PF
+  nomeFantasia      String? // só PJ
+  inscricaoEstadual String? // só PJ + indicadorIe = CONTRIBUINTE_ICMS
+  indicadorIe       IndicadorIeDestinatario @default(NAO_CONTRIBUINTE)
+  inscricaoSuframa  String? // zonas francas
+  email             String?
+  phone             String?
 
   // Endereço (mesmo padrão de CompanyAddress)
-  logradouro          String?
-  numero              String?
-  complemento         String?
-  bairro              String?
-  cep                 String?
-  codIbgeMunicipio    String?
-  municipio           String?
-  uf                  String?
-  codPais             String?      @default("1058")
-  pais                String?      @default("BRASIL")
+  logradouro       String?
+  numero           String?
+  complemento      String?
+  bairro           String?
+  cep              String?
+  codIbgeMunicipio String?
+  municipio        String?
+  uf               String?
+  codPais          String? @default("1058")
+  pais             String? @default("BRASIL")
 
-  notes               String?
-  isActive            Boolean      @default(true)
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
+  notes     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  company             Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  nfes                Nfe[]
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  nfes    Nfe[]
 
   @@unique([companyId, cpfCnpj])
   @@index([companyId])
@@ -1049,43 +1136,43 @@ model Customer {
 // ─── Produtos/Serviços (por empresa) ────────────────────────────────────────
 
 model Product {
-  id                  String       @id @default(uuid())
-  companyId           String
+  id        String @id @default(uuid())
+  companyId String
 
   // Identificação
-  codigoInterno       String                                // cProd
-  codigoBarras        String?                               // cEAN/GTIN
-  descricao           String                                // xProd
+  codigoInterno String // cProd
+  codigoBarras  String? // cEAN/GTIN
+  descricao     String // xProd
 
   // Classificação fiscal
-  ncmCodigo           String?                               // FK → NcmCode.codigo (8 díg)
-  cestCodigo          String?                               // string livre — catálogo CEST em fase futura
-  cfopPadrao          String?                               // FK → CfopCode.codigo (4 díg)
-  unidade             String                                // uCom (ex: "UN", "KG", "L", "PC")
-  origem              MercadoriaOrigem @default(NACIONAL)
+  ncmCodigo  String? // FK → NcmCode.codigo (8 díg)
+  cestCodigo String? // string livre — catálogo CEST em fase futura
+  cfopPadrao String? // FK → CfopCode.codigo (4 díg)
+  unidade    String // uCom (ex: "UN", "KG", "L", "PC")
+  origem     MercadoriaOrigem @default(NACIONAL)
 
   // Tributação padrão (depende do CRT da empresa)
-  cstIcmsPadrao       String?                               // FK → CstIcmsCode (quando CRT = REGIME_NORMAL)
-  csosnPadrao         String?                               // FK → CsosnCode (quando CRT = SIMPLES_NACIONAL/MEI)
-  aliquotaIcms        Decimal?     @db.Decimal(5, 2)        // %
-  aliquotaPis         Decimal?     @db.Decimal(5, 2)
-  aliquotaCofins      Decimal?     @db.Decimal(5, 2)
-  aliquotaIpi         Decimal?     @db.Decimal(5, 2)
+  cstIcmsPadrao  String? // FK → CstIcmsCode (quando CRT = REGIME_NORMAL)
+  csosnPadrao    String? // FK → CsosnCode (quando CRT = SIMPLES_NACIONAL/MEI)
+  aliquotaIcms   Decimal? @db.Decimal(5, 2) // %
+  aliquotaPis    Decimal? @db.Decimal(5, 2)
+  aliquotaCofins Decimal? @db.Decimal(5, 2)
+  aliquotaIpi    Decimal? @db.Decimal(5, 2)
 
   // Comercial
-  precoVenda          Decimal      @db.Decimal(10, 2)
-  precoCusto          Decimal?     @db.Decimal(10, 2)
+  precoVenda Decimal  @db.Decimal(10, 2)
+  precoCusto Decimal? @db.Decimal(10, 2)
 
-  isActive            Boolean      @default(true)
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  company             Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  ncm                 NcmCode?     @relation(fields: [ncmCodigo], references: [codigo])
-  cfop                CfopCode?    @relation(fields: [cfopPadrao], references: [codigo])
-  cstIcms             CstIcmsCode? @relation(fields: [cstIcmsPadrao], references: [codigo])
-  csosn               CsosnCode?   @relation(fields: [csosnPadrao], references: [codigo])
-  nfeItens            NfeItem[]
+  company  Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  ncm      NcmCode?     @relation(fields: [ncmCodigo], references: [codigo])
+  cfop     CfopCode?    @relation(fields: [cfopPadrao], references: [codigo])
+  cstIcms  CstIcmsCode? @relation(fields: [cstIcmsPadrao], references: [codigo])
+  csosn    CsosnCode?   @relation(fields: [csosnPadrao], references: [codigo])
+  nfeItens NfeItem[]
 
   @@unique([companyId, codigoInterno])
   @@index([companyId])
@@ -1097,65 +1184,65 @@ model Product {
 // ─── NF-e emitida (cabeçalho) ──────────────────────────────────────────────
 
 model Nfe {
-  id                   String           @id @default(uuid())
-  companyId            String
-  customerId           String
+  id         String @id @default(uuid())
+  companyId  String
+  customerId String
 
   // Identificação
-  serie                String                                      // copiado do CompanyNfeConfig no momento da criação
-  numero               Int?                                        // null em rascunho — atribuído ao transmitir
-  chave                String?          @unique                    // 44 dígitos — gerada ao transmitir
+  serie  String // copiado do CompanyNfeConfig no momento da criação
+  numero Int? // null em rascunho — atribuído ao transmitir
+  chave  String? @unique // 44 dígitos — gerada ao transmitir
 
   // Status / ciclo de vida
-  status               NfeStatus        @default(RASCUNHO)
+  status NfeStatus @default(RASCUNHO)
 
   // Configuração fiscal
-  finalidade           NfeFinalidade    @default(NORMAL)
-  naturezaOperacao     String                                      // ex: "Venda de mercadoria"
-  tipoOperacao         NfeTipoOperacao
-  modFrete             NfeModFrete      @default(SEM_TRANSPORTE)
-  indicadorPresenca    String?                                     // indPres: 0..5,9
+  finalidade        NfeFinalidade   @default(NORMAL)
+  naturezaOperacao  String // ex: "Venda de mercadoria"
+  tipoOperacao      NfeTipoOperacao
+  modFrete          NfeModFrete     @default(SEM_TRANSPORTE)
+  indicadorPresenca String? // indPres: 0..5,9
 
   // Totais (recalculados a partir dos itens)
-  totalProdutos        Decimal          @default(0)  @db.Decimal(15, 2)
-  totalFrete           Decimal          @default(0)  @db.Decimal(15, 2)
-  totalDesconto        Decimal          @default(0)  @db.Decimal(15, 2)
-  totalSeguro          Decimal          @default(0)  @db.Decimal(15, 2)
-  totalOutros          Decimal          @default(0)  @db.Decimal(15, 2)
-  totalIcms            Decimal          @default(0)  @db.Decimal(15, 2)
-  totalIcmsSt          Decimal          @default(0)  @db.Decimal(15, 2)
-  totalIpi             Decimal          @default(0)  @db.Decimal(15, 2)
-  totalPis             Decimal          @default(0)  @db.Decimal(15, 2)
-  totalCofins          Decimal          @default(0)  @db.Decimal(15, 2)
-  totalNota            Decimal          @default(0)  @db.Decimal(15, 2)
+  totalProdutos Decimal @default(0) @db.Decimal(15, 2)
+  totalFrete    Decimal @default(0) @db.Decimal(15, 2)
+  totalDesconto Decimal @default(0) @db.Decimal(15, 2)
+  totalSeguro   Decimal @default(0) @db.Decimal(15, 2)
+  totalOutros   Decimal @default(0) @db.Decimal(15, 2)
+  totalIcms     Decimal @default(0) @db.Decimal(15, 2)
+  totalIcmsSt   Decimal @default(0) @db.Decimal(15, 2)
+  totalIpi      Decimal @default(0) @db.Decimal(15, 2)
+  totalPis      Decimal @default(0) @db.Decimal(15, 2)
+  totalCofins   Decimal @default(0) @db.Decimal(15, 2)
+  totalNota     Decimal @default(0) @db.Decimal(15, 2)
 
   // Observações
-  observacoesFiscais   String?                                     // infAdFisco
-  observacoesContrib   String?                                     // infCpl
+  observacoesFiscais String? // infAdFisco
+  observacoesContrib String? // infCpl
 
   // Resposta SEFAZ (após transmissão)
   protocoloAutorizacao String?
   dataAutorizacao      DateTime?
   cStat                String?
   xMotivo              String?
-  xmlAssinado          String?          @db.Text                   // gzip base64 — XML assinado antes do envio
-  xmlAutorizado        String?          @db.Text                   // gzip base64 — XML com protNFe (final)
+  xmlAssinado          String?   @db.Text // gzip base64 — XML assinado antes do envio
+  xmlAutorizado        String?   @db.Text // gzip base64 — XML com protNFe (final)
 
   // Cancelamento (preenchido por evento)
-  justifCancelamento   String?
-  dataCancelamento     DateTime?
+  justifCancelamento String?
+  dataCancelamento   DateTime?
 
-  isActive             Boolean          @default(true)
-  createdAt            DateTime         @default(now())
-  updatedAt            DateTime         @updatedAt
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  company              Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer             Customer         @relation(fields: [customerId], references: [id])
-  itens                NfeItem[]
-  pagamentos           NfePagamento[]
-  eventos              NfeEvento[]
+  company    Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer   Customer       @relation(fields: [customerId], references: [id])
+  itens      NfeItem[]
+  pagamentos NfePagamento[]
+  eventos    NfeEvento[]
 
-  @@unique([companyId, serie, numero])  // numero só preenchido após transmitir; nulls múltiplos permitidos
+  @@unique([companyId, serie, numero]) // numero só preenchido após transmitir; nulls múltiplos permitidos
   @@index([companyId])
   @@index([customerId])
   @@index([status])
@@ -1165,54 +1252,54 @@ model Nfe {
 // ─── Itens da NF-e (snapshot por nota) ─────────────────────────────────────
 
 model NfeItem {
-  id                  String           @id @default(uuid())
-  nfeId               String
-  productId           String
-  ordem               Int                                          // nItem (1-based)
+  id        String @id @default(uuid())
+  nfeId     String
+  productId String
+  ordem     Int // nItem (1-based)
 
   // Identificação (defaults vindos do Product, podem ser sobrescritos)
-  cfop                String                                       // pode diferir do CFOP padrão do Product
-  unidade             String
+  cfop    String // pode diferir do CFOP padrão do Product
+  unidade String
 
   // Quantidade e valor
-  quantidade          Decimal          @db.Decimal(15, 4)
-  valorUnitario       Decimal          @db.Decimal(15, 4)
-  desconto            Decimal          @default(0)  @db.Decimal(15, 2)
-  valorTotal          Decimal          @db.Decimal(15, 2)          // qtd * vUnit - desconto
+  quantidade    Decimal @db.Decimal(15, 4)
+  valorUnitario Decimal @db.Decimal(15, 4)
+  desconto      Decimal @default(0) @db.Decimal(15, 2)
+  valorTotal    Decimal @db.Decimal(15, 2) // qtd * vUnit - desconto
 
   // ICMS (CST se CRT=Regime Normal, CSOSN se CRT=Simples)
-  origem              MercadoriaOrigem
-  cstIcms             String?                                      // 2 dígitos (CST) ou 3 dígitos (CSOSN)
-  baseCalcIcms        Decimal?         @db.Decimal(15, 2)
-  aliquotaIcms        Decimal?         @db.Decimal(5, 2)
-  valorIcms           Decimal?         @db.Decimal(15, 2)
-  baseCalcIcmsSt      Decimal?         @db.Decimal(15, 2)
-  aliquotaIcmsSt      Decimal?         @db.Decimal(5, 2)
-  valorIcmsSt         Decimal?         @db.Decimal(15, 2)
+  origem         MercadoriaOrigem
+  cstIcms        String? // 2 dígitos (CST) ou 3 dígitos (CSOSN)
+  baseCalcIcms   Decimal?         @db.Decimal(15, 2)
+  aliquotaIcms   Decimal?         @db.Decimal(5, 2)
+  valorIcms      Decimal?         @db.Decimal(15, 2)
+  baseCalcIcmsSt Decimal?         @db.Decimal(15, 2)
+  aliquotaIcmsSt Decimal?         @db.Decimal(5, 2)
+  valorIcmsSt    Decimal?         @db.Decimal(15, 2)
 
   // PIS
-  cstPis              String?
-  baseCalcPis         Decimal?         @db.Decimal(15, 2)
-  aliquotaPis         Decimal?         @db.Decimal(5, 2)
-  valorPis            Decimal?         @db.Decimal(15, 2)
+  cstPis      String?
+  baseCalcPis Decimal? @db.Decimal(15, 2)
+  aliquotaPis Decimal? @db.Decimal(5, 2)
+  valorPis    Decimal? @db.Decimal(15, 2)
 
   // COFINS
-  cstCofins           String?
-  baseCalcCofins      Decimal?         @db.Decimal(15, 2)
-  aliquotaCofins      Decimal?         @db.Decimal(5, 2)
-  valorCofins         Decimal?         @db.Decimal(15, 2)
+  cstCofins      String?
+  baseCalcCofins Decimal? @db.Decimal(15, 2)
+  aliquotaCofins Decimal? @db.Decimal(5, 2)
+  valorCofins    Decimal? @db.Decimal(15, 2)
 
   // IPI
-  cstIpi              String?
-  baseCalcIpi         Decimal?         @db.Decimal(15, 2)
-  aliquotaIpi         Decimal?         @db.Decimal(5, 2)
-  valorIpi            Decimal?         @db.Decimal(15, 2)
+  cstIpi      String?
+  baseCalcIpi Decimal? @db.Decimal(15, 2)
+  aliquotaIpi Decimal? @db.Decimal(5, 2)
+  valorIpi    Decimal? @db.Decimal(15, 2)
 
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  nfe                 Nfe              @relation(fields: [nfeId], references: [id], onDelete: Cascade)
-  product             Product          @relation(fields: [productId], references: [id])
+  nfe     Nfe     @relation(fields: [nfeId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
 
   @@unique([nfeId, ordem])
   @@index([nfeId])
@@ -1222,14 +1309,14 @@ model NfeItem {
 // ─── Pagamentos da NF-e ────────────────────────────────────────────────────
 
 model NfePagamento {
-  id                  String           @id @default(uuid())
-  nfeId               String
-  formaPagamento      String                                       // codSefaz: "01" dinheiro, "03" cartão crédito, "17" PIX, "90" sem pagto, "99" outros
-  valor               Decimal          @db.Decimal(15, 2)
+  id             String  @id @default(uuid())
+  nfeId          String
+  formaPagamento String // codSefaz: "01" dinheiro, "03" cartão crédito, "17" PIX, "90" sem pagto, "99" outros
+  valor          Decimal @db.Decimal(15, 2)
 
-  createdAt           DateTime         @default(now())
+  createdAt DateTime @default(now())
 
-  nfe                 Nfe              @relation(fields: [nfeId], references: [id], onDelete: Cascade)
+  nfe Nfe @relation(fields: [nfeId], references: [id], onDelete: Cascade)
 
   @@index([nfeId])
 }
@@ -1237,22 +1324,22 @@ model NfePagamento {
 // ─── Eventos da NF-e (cancelamento, CC-e, etc.) ────────────────────────────
 
 model NfeEvento {
-  id                  String           @id @default(uuid())
-  nfeId               String
-  tpEvento            String                                       // "110110" CC-e, "110111" cancelamento
-  sequencia           Int              @default(1)                 // nSeqEvento (1..N)
-  justificativa       String?
-  status              String           @default("PENDING")         // PENDING | AUTORIZADO | REJEITADO
-  protocolo           String?
-  cStat               String?
-  xMotivo             String?
-  xmlEnvio            String?          @db.Text
-  xmlResposta         String?          @db.Text
+  id            String  @id @default(uuid())
+  nfeId         String
+  tpEvento      String // "110110" CC-e, "110111" cancelamento
+  sequencia     Int     @default(1) // nSeqEvento (1..N)
+  justificativa String?
+  status        String  @default("PENDING") // PENDING | AUTORIZADO | REJEITADO
+  protocolo     String?
+  cStat         String?
+  xMotivo       String?
+  xmlEnvio      String? @db.Text
+  xmlResposta   String? @db.Text
 
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  nfe                 Nfe              @relation(fields: [nfeId], references: [id], onDelete: Cascade)
+  nfe Nfe @relation(fields: [nfeId], references: [id], onDelete: Cascade)
 
   @@unique([nfeId, tpEvento, sequencia])
   @@index([nfeId])
@@ -1261,29 +1348,29 @@ model NfeEvento {
 // ─── Inutilização de numeração NF-e ────────────────────────────────────────
 
 model NfeInutilizacao {
-  id              String   @id @default(uuid())
-  companyId       String
+  id        String @id @default(uuid())
+  companyId String
 
   // Faixa inutilizada
-  serie           String
-  numeroInicial   Int
-  numeroFinal     Int
-  ano             Int                                    // AAAA (ano da inutilização)
-  justificativa   String                                 // 15-255 chars
+  serie         String
+  numeroInicial Int
+  numeroFinal   Int
+  ano           Int // AAAA (ano da inutilização)
+  justificativa String // 15-255 chars
 
   // Resposta SEFAZ
-  status          String   @default("PENDING")           // PENDING | HOMOLOGADA | REJEITADA
-  protocolo       String?                                // nProt do retorno
-  cStat           String?
-  xMotivo         String?
-  dhRecbto        DateTime?
-  xmlEnvio        String?  @db.Text
-  xmlResposta     String?  @db.Text
+  status      String    @default("PENDING") // PENDING | HOMOLOGADA | REJEITADA
+  protocolo   String? // nProt do retorno
+  cStat       String?
+  xMotivo     String?
+  dhRecbto    DateTime?
+  xmlEnvio    String?   @db.Text
+  xmlResposta String?   @db.Text
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, serie, numeroInicial, numeroFinal, ano])
   @@index([companyId])
@@ -1311,8 +1398,8 @@ model Partner {
   email               String        @unique
   password            String
   phone               String?
-  document            String?       // CPF ou CNPJ
-  slug                String        @unique         // tabilize.com.br/ref/:slug
+  document            String? // CPF ou CNPJ
+  slug                String        @unique // tabilize.com.br/ref/:slug
   commissionPct       Decimal       @default(20) @db.Decimal(5, 2)
   status              PartnerStatus @default(PENDING)
   approvedAt          DateTime?
@@ -1325,9 +1412,9 @@ model Partner {
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
 
-  approvedBy     User?  @relation("PartnerApprovedBy", fields: [approvedById], references: [id])
-  referredTeams  Team[] @relation("PartnerReferrals")
-  leads          Lead[]
+  approvedBy    User?  @relation("PartnerApprovedBy", fields: [approvedById], references: [id])
+  referredTeams Team[] @relation("PartnerReferrals")
+  leads         Lead[]
 
   @@index([status])
   @@index([slug])
@@ -1338,8 +1425,8 @@ model PartnerMaterial {
   title       String
   description String?
   type        PartnerMaterialType
-  url         String?             // R2 key/URL (PDF/VIDEO) ou link externo (LINK)
-  content     String?             @db.Text   // markdown inline (MARKDOWN)
+  url         String? // R2 key/URL (PDF/VIDEO) ou link externo (LINK)
+  content     String?             @db.Text // markdown inline (MARKDOWN)
   order       Int                 @default(0)
   isActive    Boolean             @default(true)
   createdAt   DateTime            @default(now())
@@ -1350,9 +1437,9 @@ model PartnerMaterial {
 
 model LandingPage {
   id          String   @id @default(uuid())
-  title       String                 // "Página para contadores PJ"
+  title       String // "Página para contadores PJ"
   description String?
-  url         String                 // URL externa completa (ex: https://tabilize.com.br/lp/contadores)
+  url         String // URL externa completa (ex: https://tabilize.com.br/lp/contadores)
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -1395,7 +1482,7 @@ enum LeadActivityType {
 }
 
 model Lead {
-  id          String   @id @default(uuid())
+  id String @id @default(uuid())
 
   // identificação
   name        String?
@@ -1458,5 +1545,3 @@ model LeadActivity {
 
   @@index([leadId, createdAt])
 }
-
-
